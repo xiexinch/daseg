@@ -41,7 +41,7 @@ def train_model(model,
                 validate=False,
                 timestamp=None,
                 meta=None):
-    logger = get_root_logger
+    logger = get_root_logger()
 
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
@@ -78,28 +78,30 @@ def train_model(model,
                                                **cfg.apex_amp)
         _use_apex_amp = True
 
-    # put model on gpus
-    if distributed:
-        find_unused_parameters = cfg.get('find_unused_parameters', False)
-        use_ddp_wrapper = cfg.get('use_ddp_wrapper', False)
-        # Sets the `find_unused_parameters` parameter in
-        # torch.nn.parallel.DistributedDataParallel
-        if use_ddp_wrapper:
-            mmcv.print_log('Use DDP Wrapper', 'mmgen')
-            model = DistributedDataParallelWrapper(
-                model.cuda(),
-                device_ids=[torch.cuda.current_device()],
-                broadcast_buffers=False,
-                find_unused_parameters=find_unused_parameters)
+    if torch.cuda.is_available():
+
+        # put model on gpus
+        if distributed:
+            find_unused_parameters = cfg.get('find_unused_parameters', False)
+            use_ddp_wrapper = cfg.get('use_ddp_wrapper', False)
+            # Sets the `find_unused_parameters` parameter in
+            # torch.nn.parallel.DistributedDataParallel
+            if use_ddp_wrapper:
+                mmcv.print_log('Use DDP Wrapper', 'mmgen')
+                model = DistributedDataParallelWrapper(
+                    model.cuda(),
+                    device_ids=[torch.cuda.current_device()],
+                    broadcast_buffers=False,
+                    find_unused_parameters=find_unused_parameters)
+            else:
+                model = MMDistributedDataParallel(
+                    model.cuda(),
+                    device_ids=[torch.cuda.current_device()],
+                    broadcast_buffers=False,
+                    find_unused_parameters=find_unused_parameters)
         else:
-            model = MMDistributedDataParallel(
-                model.cuda(),
-                device_ids=[torch.cuda.current_device()],
-                broadcast_buffers=False,
-                find_unused_parameters=find_unused_parameters)
-    else:
-        model = MMDataParallel(model.cuda(cfg.gpu_ids[0]),
-                               device_ids=cfg.gpu_ids)
+            model = MMDataParallel(model.cuda(cfg.gpu_ids[0]),
+                                   device_ids=cfg.gpu_ids)
 
     # allow users to define the runner
     if cfg.get('runner', None):
@@ -112,12 +114,11 @@ def train_model(model,
                  use_apex_amp=_use_apex_amp,
                  meta=meta))
     else:
-        runner = IterBasedRunner(
-            model,
-            optimizer=optimizer,
-            work_dir=cfg.work_dirm
-            logger=logger,
-            meta=meta)
+        runner = IterBasedRunner(model,
+                                 optimizer=optimizer,
+                                 work_dir=cfg.work_dir,
+                                 logger=logger,
+                                 meta=meta)
         # set if use dynamic ddp in training
         # is_dynamic_ddp=cfg.get('is_dynamic_ddp', False))
     # an ugly walkaround to make the .log and .log.json filenames the same
@@ -125,7 +126,7 @@ def train_model(model,
 
     # fp16 setting
     fp16_cfg = cfg.get('fp16', None)
-    
+
     # directly optimzie parameter in `train_step` function.
     if cfg.get('optimizer_cfg', None) is None:
         optimizer_config = None
@@ -136,17 +137,17 @@ def train_model(model,
         optimizer_config = OptimizerHook(**cfg.optimizer_config)
     else:
         optimizer_config = cfg.optimizer_config
-    
+
     # update `out_dir` in ckpt hook
     if cfg.checkpoint_config is not None:
         cfg.checkpoint_config['out_dir'] = os.path.join(
             cfg.work_dir, cfg.checkpoint_config.get('out_dir', 'ckpt'))
-    
+
     # register hooks
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config,
                                    cfg.get('momentum_config', None))
-    
+
     # In general, we do NOT adopt standard evaluation hook in GAN training.
     # Thus, if you want a eval hook, you need further define the key of
     # 'evaluation' in the config.
@@ -160,14 +161,15 @@ def train_model(model,
             'workers_per_gpu': cfg.data.workers_per_gpu,
             **cfg.data.get('val_data_loader', {})
         }
-        val_dataloader = build_dataloader(
-            val_dataset, dist=distributed, **val_loader_cfg)
+        val_dataloader = build_dataloader(val_dataset,
+                                          dist=distributed,
+                                          **val_loader_cfg)
         eval_cfg = deepcopy(cfg.get('evaluation'))
         eval_cfg.update(dict(dist=distributed, dataloader=val_dataloader))
         eval_hook = build_from_cfg(eval_cfg, HOOKS)
         priority = eval_cfg.pop('priority', 'NORMAL')
         runner.register_hook(eval_hook, priority=priority)
-    
+
     # user-defined hooks
     if cfg.get('custom_hooks', None):
         custom_hooks = cfg.custom_hooks

@@ -37,5 +37,8 @@ model = dict(
                        output_scale=4,
                        out_channels=100),
     seg_loss=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-    gan_loss=dict(type='GANLoss', gan_type='vanilla'),
-)
+    gan_loss=dict(type='GANLoss', gan_type='vanilla'))
+
+train_cfg = None
+
+test_cfg = None

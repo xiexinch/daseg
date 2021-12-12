@@ -1,8 +1,8 @@
 # dataset settings
 source_dataset_type = 'CityscapesDataset'
 source_data_root = 'data/cityscapes/'
-target_dataset_type = 'DarkZurichDataset'
-target_data_root = 'data/dark_zurich'
+target_dataset_type = 'CityscapesDataset'
+target_data_root = 'data/cityscapes/'
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53],
                     std=[58.395, 57.12, 57.375],
                     to_rgb=True)
@@ -35,28 +35,46 @@ test_pipeline = [
         ])
 ]
 
-source_dataset_cfg = dict(type=source_dataset_type,
-                          data_root=source_data_root,
-                          img_dir='leftOmg8bit/train',
-                          ann_dir='gtFine/train')
+mix_dataset_pipeline = [
+    dict(type='Collect',
+         keys=['source_img', 'source_gt_mask', 'target_img'],
+         meta_keys=[])
+]
 
-target_dataset_cfg = dict(type=source_dataset_type,
-                          data_root=source_data_root,
-                          img_dir='leftOmg8bit/train',
-                          ann_dir='gtFine/train')
+source_dataset_cfg_train = dict(type=source_dataset_type,
+                                data_root=source_data_root,
+                                img_dir='leftImg8bit/train',
+                                ann_dir='gtFine/train',
+                                pipeline=train_pipeline)
+source_dataset_cfg_test = dict(type=source_dataset_type,
+                               data_root=source_data_root,
+                               img_dir='leftImg8bit/val',
+                               ann_dir='gtFine/val',
+                               pipeline=test_pipeline)
+
+target_dataset_cfg_train = dict(type=source_dataset_type,
+                                data_root=source_data_root,
+                                img_dir='leftImg8bit/train',
+                                ann_dir='gtFine/train',
+                                pipeline=train_pipeline)
+target_dataset_cfg_test = dict(type=source_dataset_type,
+                               data_root=source_data_root,
+                               img_dir='leftImg8bit/val',
+                               ann_dir='gtFine/val',
+                               pipeline=test_pipeline)
 
 # mix dataset
 data = dict(samples_per_gpu=2,
             workers_per_gpu=4,
             train=dict(type='MixDataset',
-                       source_cfg=source_dataset_cfg,
-                       target_cfg=target_dataset_cfg,
-                       pipeline=train_pipeline),
+                       source_cfg=source_dataset_cfg_train,
+                       target_cfg=target_dataset_cfg_train,
+                       pipeline=mix_dataset_pipeline),
             val=dict(type='MixDataset',
-                     source_cfg=source_dataset_cfg,
-                     target_cfg=target_dataset_cfg,
-                     pipeline=test_pipeline),
+                     source_cfg=source_dataset_cfg_test,
+                     target_cfg=target_dataset_cfg_test,
+                     pipeline=mix_dataset_pipeline),
             test=dict(type='MixDataset',
-                      source_cfg=source_dataset_cfg,
-                      target_cfg=target_dataset_cfg,
-                      pipeline=test_pipeline))
+                      source_cfg=source_dataset_cfg_test,
+                      target_cfg=target_dataset_cfg_test,
+                      pipeline=mix_dataset_pipeline))

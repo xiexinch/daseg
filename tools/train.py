@@ -11,11 +11,12 @@ from mmcv.runner import get_dist_info, init_dist
 from mmcv.utils import get_git_hash
 
 from mmgen import __version__
-from mmgen.apis import set_random_seed, train_model
+from mmgen.apis import set_random_seed
 from mmgen.utils import collect_env, get_root_logger
 
 from daseg.datasets import build_dataset
 from daseg.models import build_model
+from daseg.api import train_model
 
 
 def parse_args():

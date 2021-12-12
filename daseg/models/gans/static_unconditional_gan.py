@@ -98,7 +98,15 @@ class CustomStaticUnconditionalGAN(BaseGAN):
                    use_apex_amp=False,
                    running_status=None):
         # get source images
+<<<<<<< HEAD
         source_img_metas, source_imgs, source_gt_masks, target_img_metas, target_imgs = data_batch
+=======
+        source_imgs = data_batch['source_img'].data
+        source_gt_masks = data_batch['source_gt_mask'].data
+        target_imgs = data_batch['target_img'].data
+        # print(data_batch.keys())
+        # source_imgs, source_gt_masks, target_imgs = data_batch
+>>>>>>> 3d3e38e75b992550688bd10e1744c00d646b4137
 
         # If you adopt ddp, this batch size is local batch size for each GPU.
         # If you adopt dp, this batch size is the global batch size as usual.

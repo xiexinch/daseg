@@ -18,13 +18,12 @@ class MixDataset(Dataset):
     def __getitem__(self, idx: int):
         source_img_metas, source_img, source_gt_mask = self.source_dataset[
             random.randint(0, len(self.source_dataset))]
-        target_img_metas, target_img, target_gt_mask = self.target_dataset[idx]
-        return dict(sourc_img_metas=source_img_metas,
+        target_img_metas, target_img, _ = self.target_dataset[idx]
+        return dict(source_img_metas=source_img_metas,
                     source_img=source_img,
                     source_gt_mask=source_gt_mask,
                     target_img_metas=target_img_metas,
-                    target_img=target_img,
-                    target_gt_mask=target_gt_mask)
+                    target_img=target_img)
 
     def __repr__(self):
         source_dataset_name = self.source_dataset.__class__

@@ -12,33 +12,32 @@ from mmcv.utils import get_git_hash
 
 from mmgen import __version__
 from mmgen.apis import set_random_seed, train_model
-from mmgen.datasets import build_dataset
-from mmgen.models import build_model
 from mmgen.utils import collect_env, get_root_logger
+
+from daseg.datasets import build_dataset
+from daseg.models import build_model
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a GAN model')
     parser.add_argument('config', help='train config file path')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
-    parser.add_argument(
-        '--resume-from', help='the checkpoint file to resume from')
+    parser.add_argument('--resume-from',
+                        help='the checkpoint file to resume from')
     parser.add_argument(
         '--no-validate',
         action='store_true',
         help='whether not to evaluate the checkpoint during training')
     group_gpus = parser.add_mutually_exclusive_group()
-    group_gpus.add_argument(
-        '--gpus',
-        type=int,
-        help='number of gpus to use '
-        '(only applicable to non-distributed training)')
-    group_gpus.add_argument(
-        '--gpu-ids',
-        type=int,
-        nargs='+',
-        help='ids of gpus to use '
-        '(only applicable to non-distributed training)')
+    group_gpus.add_argument('--gpus',
+                            type=int,
+                            help='number of gpus to use '
+                            '(only applicable to non-distributed training)')
+    group_gpus.add_argument('--gpu-ids',
+                            type=int,
+                            nargs='+',
+                            help='ids of gpus to use '
+                            '(only applicable to non-distributed training)')
     parser.add_argument('--seed', type=int, default=2021, help='random seed')
     parser.add_argument(
         '--deterministic',
@@ -50,11 +49,10 @@ def parse_args():
         action=DictAction,
         help='override some settings in the used config, the key-value pair '
         'in xxx=yyy format will be merged into config file.')
-    parser.add_argument(
-        '--launcher',
-        choices=['none', 'pytorch', 'slurm', 'mpi'],
-        default='none',
-        help='job launcher')
+    parser.add_argument('--launcher',
+                        choices=['none', 'pytorch', 'slurm', 'mpi'],
+                        default='none',
+                        help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
@@ -135,8 +133,9 @@ def main():
     meta['seed'] = args.seed
     meta['exp_name'] = osp.basename(args.config)
 
-    model = build_model(
-        cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
+    model = build_model(cfg.model,
+                        train_cfg=cfg.train_cfg,
+                        test_cfg=cfg.test_cfg)
 
     datasets = [build_dataset(cfg.data.train)]
     if len(cfg.workflow) == 2:
@@ -149,14 +148,13 @@ def main():
         cfg.checkpoint_config.meta = dict(mmgen_version=__version__ +
                                           get_git_hash()[:7])
 
-    train_model(
-        model,
-        datasets,
-        cfg,
-        distributed=distributed,
-        validate=(not args.no_validate),
-        timestamp=timestamp,
-        meta=meta)
+    train_model(model,
+                datasets,
+                cfg,
+                distributed=distributed,
+                validate=(not args.no_validate),
+                timestamp=timestamp,
+                meta=meta)
 
 
 if __name__ == '__main__':

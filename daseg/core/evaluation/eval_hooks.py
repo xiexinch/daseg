@@ -9,7 +9,7 @@ import torch.distributed as dist
 
 class EvalHook(EvalHook_):
     def _do_evaluate(self, runner):
-        results = single_gpu_test(runner.model.segmentor,
+        results = single_gpu_test(runner.model.module.segmentor,
                                   self.dataloader,
                                   show=False,
                                   pre_eval=self.pre_eval)
@@ -23,8 +23,7 @@ class EvalHook(EvalHook_):
 class DistEvalHook(DistEvalHook_):
     def _do_evaluate(self, runner):
         if self.broadcast_bn_buffer:
-            print(runner.model)
-            model = runner.model.segmentor
+            model = runner.model.module.segmentor
             for name, module in model.named_modules():
                 if isinstance(module,
                               _BatchNorm) and module.track_running_stats:
@@ -37,7 +36,7 @@ class DistEvalHook(DistEvalHook_):
         if tmp_dir is None:
             tmpdir = osp.join(runner.work_dir, '.eval_hook')
 
-        results = multi_gpu_test(runner.segmentor,
+        results = multi_gpu_test(runner.model.module.segmentor,
                                  self.dataloader,
                                  tmpdir=tmpdir,
                                  gpu_collect=self.gpu_collect,

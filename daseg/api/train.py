@@ -14,8 +14,9 @@ from mmgen.utils import get_root_logger
 
 from mmseg.datasets import build_dataloader as build_mmseg_dataloader, build_dataset as build_mmseg_dataset
 
-from daseg.datasets import build_dataloader, build_dataset
+from daseg.datasets import build_dataloader
 from daseg.core.ddp_wrapper import DistributedDataParallelWrapper
+from daseg.core import EvalHook, DistEvalHook
 
 
 def set_random_seed(seed: int, deterministic=False, use_rank_shift=True):
@@ -167,9 +168,10 @@ def train_model(model,
                                                 **val_loader_cfg)
         eval_cfg = deepcopy(cfg.get('evaluation'))
         eval_cfg.update(dict(dist=distributed, dataloader=val_dataloader))
-        eval_hook = build_from_cfg(eval_cfg, HOOKS)
-        priority = eval_cfg.pop('priority', 'NORMAL')
-        runner.register_hook(eval_hook, priority=priority)
+        eval_hook = DistEvalHook if distributed else EvalHook
+        #priority = eval_cfg.pop('priority', 'NORMAL')
+        runner.register_hook(eval_hook(val_dataloader, **eval_cfg),
+                             priority='LOW')
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):

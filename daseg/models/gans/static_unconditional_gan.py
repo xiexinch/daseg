@@ -285,7 +285,9 @@ class CustomStaticUnconditionalGAN(BaseGAN):
         source_gt_masks = outputs_dict['source_gt_masks']
         loss = self.segmentor.decode_head.losses(source_seg_logits,
                                                  source_gt_masks)
-        losses_dict['loss_source_seg'] = loss
+        # print(type(loss))
+        # print(loss.keys())
+        losses_dict['loss_source_seg'] = loss['loss_ce']
 
         # TODO seg auxiliary loss
 
@@ -293,3 +295,6 @@ class CustomStaticUnconditionalGAN(BaseGAN):
         loss, log_var = self._parse_losses(losses_dict)
 
         return loss, log_var
+
+    def forward_test(self, data, **kwargs):
+        pass

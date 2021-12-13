@@ -1,4 +1,4 @@
-_base_ = ['./base_model.py', 'dataset.py', 'default_runtime.py']
+_base_ = ['./base_model.py', 'city2dark.py', 'default_runtime.py']
 
 # define optimizer
 optimizer = dict(segmentor=dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0005),

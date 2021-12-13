@@ -20,7 +20,7 @@ class MixDataset(Dataset):
 
     def __getitem__(self, idx: int):
         source_data = self.source_dataset[random.randint(
-            0, len(self.source_dataset))]
+            0, len(self.source_dataset) - 1)]
         source_img_metas = source_data['img_metas']
         source_img = source_data['img']
         source_gt_mask = source_data['gt_semantic_seg']

@@ -155,17 +155,13 @@ def train_model(model,
     # 'evaluation' in the config.
     # register eval hooks
     if validate and cfg.get('evaluation', None) is not None:
-        val_dataset = build_mmseg_dataset(cfg.data.val, dict(test_mode=True))
-        # Support batch_size > 1 in validation
-        val_loader_cfg = {
-            'samples_per_gpu': 1,
-            'shuffle': True,
-            'workers_per_gpu': cfg.data.workers_per_gpu,
-            **cfg.data.get('val_data_loader', {})
-        }
-        val_dataloader = build_mmseg_dataloader(val_dataset,
-                                                dist=distributed,
-                                                **val_loader_cfg)
+        val_dataset = build_mmseg_dataset(cfg.data.val)
+        val_dataloader = build_mmseg_dataloader(
+            val_dataset,
+            samples_per_gpu=1,
+            workers_per_gpu=cfg.data.workers_per_gpu,
+            dist=distributed,
+            shuffle=False)
         eval_cfg = deepcopy(cfg.get('evaluation'))
         eval_cfg.update(dict(dist=distributed))
         eval_hook = DistEvalHook if distributed else EvalHook

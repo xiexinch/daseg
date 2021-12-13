@@ -1,5 +1,6 @@
 # define GAN model
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+# norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     type='CustomStaticUnconditionalGAN',
     # pspnet r50
@@ -33,8 +34,9 @@ model = dict(
         train_cfg=dict(),
         test_cfg=dict(mode='whole')),
     discriminator=dict(type='DCGANDiscriminator',
-                       input_scale=128,
+                       input_scale=32,
                        output_scale=4,
+                       in_channels=19,
                        out_channels=100),
     seg_loss=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
     gan_loss=dict(type='GANLoss', gan_type='vanilla'))

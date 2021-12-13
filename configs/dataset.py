@@ -65,7 +65,7 @@ target_dataset_cfg_test = dict(type=source_dataset_type,
 
 # mix dataset
 data = dict(samples_per_gpu=2,
-            workers_per_gpu=4,
+            workers_per_gpu=2,
             train=dict(type='MixDataset',
                        source_cfg=source_dataset_cfg_train,
                        target_cfg=target_dataset_cfg_train,

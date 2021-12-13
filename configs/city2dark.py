@@ -35,7 +35,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(2048, 1024),
+        img_scale=(1920, 1080),
         # img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
         flip=False,
         transforms=[
@@ -48,12 +48,6 @@ test_pipeline = [
 ]
 
 mix_dataset_pipeline_train = [
-    dict(type='Collect',
-         keys=['source_img', 'source_gt_mask', 'target_img'],
-         meta_keys=[])
-]
-
-mix_dataset_pipeline_test = [
     dict(type='Collect',
          keys=['source_img', 'source_gt_mask', 'target_img'],
          meta_keys=[])

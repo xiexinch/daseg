@@ -167,7 +167,7 @@ def train_model(model,
                                                 dist=distributed,
                                                 **val_loader_cfg)
         eval_cfg = deepcopy(cfg.get('evaluation'))
-        eval_cfg.update(dict(dist=distributed, dataloader=val_dataloader))
+        eval_cfg.update(dict(dist=distributed))
         eval_hook = DistEvalHook if distributed else EvalHook
         #priority = eval_cfg.pop('priority', 'NORMAL')
         runner.register_hook(eval_hook(val_dataloader, **eval_cfg),

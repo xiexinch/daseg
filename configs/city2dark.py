@@ -64,11 +64,6 @@ source_dataset_cfg_train = dict(type=source_dataset_type,
                                 img_dir='leftImg8bit/train',
                                 ann_dir='gtFine/train',
                                 pipeline=train_pipeline)
-source_dataset_cfg_test = dict(type=source_dataset_type,
-                               data_root=source_data_root,
-                               img_dir='leftImg8bit/val',
-                               ann_dir='gtFine/val',
-                               pipeline=test_pipeline)
 
 target_dataset_cfg_train = dict(type=target_dataset_type,
                                 data_root=target_data_root,
@@ -88,11 +83,4 @@ data = dict(samples_per_gpu=2,
                        source_cfg=source_dataset_cfg_train,
                        target_cfg=target_dataset_cfg_train,
                        pipeline=mix_dataset_pipeline_train),
-            val=dict(type='MixDataset',
-                     source_cfg=source_dataset_cfg_test,
-                     target_cfg=target_dataset_cfg_test,
-                     pipeline=mix_dataset_pipeline_train),
-            test=dict(type='MixDataset',
-                      source_cfg=source_dataset_cfg_test,
-                      target_cfg=target_dataset_cfg_test,
-                      pipeline=mix_dataset_pipeline_test))
+            val=target_dataset_cfg_test)

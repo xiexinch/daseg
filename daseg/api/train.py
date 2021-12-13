@@ -12,6 +12,8 @@ from mmgen.core.optimizer import build_optimizers
 from mmgen.core.runners.apex_amp_utils import apex_amp_initialize
 from mmgen.utils import get_root_logger
 
+from mmseg.datasets import build_dataloader as build_mmseg_dataloader, build_dataset as build_mmseg_dataset
+
 from daseg.datasets import build_dataloader, build_dataset
 from daseg.core.ddp_wrapper import DistributedDataParallelWrapper
 
@@ -79,7 +81,6 @@ def train_model(model,
         _use_apex_amp = True
 
     if torch.cuda.is_available():
-
         # put model on gpus
         if distributed:
             find_unused_parameters = cfg.get('find_unused_parameters', False)
@@ -153,17 +154,17 @@ def train_model(model,
     # 'evaluation' in the config.
     # register eval hooks
     if validate and cfg.get('evaluation', None) is not None:
-        val_dataset = build_dataset(cfg.data.val, dict(test_mode=True))
+        val_dataset = build_mmseg_dataset(cfg.data.val, dict(test_mode=True))
         # Support batch_size > 1 in validation
         val_loader_cfg = {
             'samples_per_gpu': 1,
-            'shuffle': False,
+            'shuffle': True,
             'workers_per_gpu': cfg.data.workers_per_gpu,
             **cfg.data.get('val_data_loader', {})
         }
-        val_dataloader = build_dataloader(val_dataset,
-                                          dist=distributed,
-                                          **val_loader_cfg)
+        val_dataloader = build_mmseg_dataloader(val_dataset,
+                                                dist=distributed,
+                                                **val_loader_cfg)
         eval_cfg = deepcopy(cfg.get('evaluation'))
         eval_cfg.update(dict(dist=distributed, dataloader=val_dataloader))
         eval_hook = build_from_cfg(eval_cfg, HOOKS)

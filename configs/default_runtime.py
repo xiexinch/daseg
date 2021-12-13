@@ -26,3 +26,6 @@ resume_from = None
 workflow = [('train', 10000)]
 find_unused_parameters = True
 cudnn_benchmark = True
+
+total_iters = 1000
+evaluation = dict(interval=50, metric='mIoU', pre_eval=True)

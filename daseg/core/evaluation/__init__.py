@@ -1,1 +1,3 @@
-from eval_hook import DistEvalHook, EvalHook
+from .eval_hooks import DistEvalHook, EvalHook
+
+__all__ = ['DistEvalHook', 'EvalHook']

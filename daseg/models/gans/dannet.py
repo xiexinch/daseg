@@ -102,21 +102,11 @@ class DANNet(BaseGAN):
                    loss_scaler=None,
                    use_apex_amp=False,
                    running_status=None):
-        # get source images
-        # source_imgs = source_data_batch['img'].data
-        # source_gt_masks = source_data_batch['gt_semantic_seg'].data
-        # target_imgs = target_data_batch['img'].data
         source_imgs = source_data_batch['img']
         source_gt_masks = source_data_batch['gt_semantic_seg']
         source_img_metas = source_data_batch['img_metas']
         target_imgs = target_data_batch['img']
         target_img_metas = target_data_batch['img_metas']
-        # print(type(source_imgs), source_imgs.shape)
-        # print(type(source_gt_masks), source_gt_masks.shape)
-        # print(type(target_imgs), target_imgs.shape)
-        # raise "123"
-        # print(data_batch.keys())
-        # source_imgs, source_gt_masks, target_imgs = data_batch
 
         # If you adopt ddp, this batch size is local batch size for each GPU.
         # If you adopt dp, this batch size is the global batch size as usual.
@@ -153,10 +143,11 @@ class DANNet(BaseGAN):
         target_seg_logits = torch.cat(
             [torch.from_numpy(x).unsqueeze(0) for x in target_seg_logits],
             dim=0)
-
+        
         # disc pred for target imgs and source imgs
         disc_pred_target = self.discriminator(target_seg_logits)
         disc_pred_source = self.discriminator(source_seg_logits)
+
         # get data dict to compute losses for disc
         data_dict = dict(segmentor=self.segmentor,
                          disc=self.discriminator,
@@ -247,7 +238,7 @@ class DANNet(BaseGAN):
 
         results = dict(target_seg_logits=target_seg_logits.cpu(),
                        source_seg_logits=source_seg_logits.cpu())
-        outputs = dict(log_vars=log_vars_disc,
+        outputs = dict(log_vars=log_vars,
                        num_samples=batch_size,
                        results=results)
 

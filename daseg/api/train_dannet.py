@@ -38,19 +38,23 @@ def set_random_seed(seed: int, deterministic=False, use_rank_shift=True):
     set_random_seed_mmcv()
 
 
-def train_model(model,
-                dataset,
-                cfg,
-                distributed=False,
-                validate=False,
-                timestamp=None,
-                meta=None):
+def train_dannet(model,
+                 source_dataset,
+                 target_dataset,
+                 cfg,
+                 distributed=False,
+                 validate=False,
+                 timestamp=None,
+                 meta=None):
     logger = get_root_logger()
 
     # prepare data loaders
-    dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
+    source_dataset = source_dataset if isinstance(
+        source_dataset, (list, tuple)) else [source_dataset]
+    target_dataset = target_dataset if isinstance(
+        target_dataset, (list, tuple)) else [target_dataset]
 
-    data_loaders = [
+    source_data_loaders = [
         build_dataloader(
             ds,
             cfg.data.samples_per_gpu,
@@ -58,8 +62,20 @@ def train_model(model,
             # cfg.gpus will be ignored if distributed
             len(cfg.gpu_ids),
             dist=distributed,
-            persistent_workers=cfg.data.get('persistent_workers', False),
-            seed=cfg.seed) for ds in dataset
+            persistent_workers=cfg.data.get('persistent_workers', True),
+            seed=cfg.seed) for ds in source_dataset
+    ]
+
+    target_data_loaders = [
+        build_dataloader(
+            ds,
+            cfg.data.samples_per_gpu,
+            cfg.data.workers_per_gpu,
+            # cfg.gpus will be ignored if distributed
+            len(cfg.gpu_ids),
+            dist=distributed,
+            persistent_workers=cfg.data.get('persistent_workers', True),
+            seed=cfg.seed) for ds in target_dataset
     ]
 
     # dirty code for use apex amp
@@ -82,6 +98,7 @@ def train_model(model,
                                                **cfg.apex_amp)
         _use_apex_amp = True
 
+    # for cpu init
     if torch.cuda.is_available():
         # put model on gpus
         if distributed:
@@ -164,7 +181,6 @@ def train_model(model,
             dist=distributed,
             shuffle=False)
         eval_cfg = deepcopy(cfg.get('evaluation'))
-        eval_cfg.update(dict(dist=distributed))
         eval_hook = DistEvalHook if distributed else EvalHook
         #priority = eval_cfg.pop('priority', 'NORMAL')
         runner.register_hook(eval_hook(val_dataloader, **eval_cfg),
@@ -188,4 +204,5 @@ def train_model(model,
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
-    runner.run(data_loaders, cfg.workflow, cfg.total_iters)
+    runner.run(source_data_loaders, target_data_loaders, cfg.workflow,
+               cfg.total_iters)

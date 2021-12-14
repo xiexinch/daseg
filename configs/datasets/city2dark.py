@@ -10,7 +10,7 @@ crop_size = (512, 1024)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
-    dict(type='Resize', img_scale=(2048, 1024), ratio_range=(0.5, 2.0)),
+    # dict(type='Resize', img_scale=(2048, 1024), ratio_range=(0.5, 2.0)),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip', prob=0.5),
     dict(type='PhotoMetricDistortion'),
@@ -22,7 +22,7 @@ train_pipeline = [
 target_train_pipeline = [
     dict(type='LoadImageFromFile'),
     # dict(type='LoadAnnotations'),
-    dict(type='Resize', img_scale=(2048, 1024), ratio_range=(0.5, 2.0)),
+    # dict(type='Resize', img_scale=(1920, 1080), ratio_range=(0.5, 2.0)),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip', prob=0.5),
     dict(type='PhotoMetricDistortion'),
@@ -73,8 +73,6 @@ target_dataset_cfg_test = dict(type=target_dataset_type,
 # mix dataset
 data = dict(samples_per_gpu=2,
             workers_per_gpu=4,
-            train=dict(type='MixDataset',
-                       source_cfg=source_dataset_cfg_train,
-                       target_cfg=target_dataset_cfg_train,
-                       pipeline=mix_dataset_pipeline_train),
+            source_train=source_dataset_cfg_train,
+            target_train=target_dataset_cfg_train,
             val=target_dataset_cfg_test)

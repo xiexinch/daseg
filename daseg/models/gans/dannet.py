@@ -136,12 +136,23 @@ class DANNet(BaseGAN):
         optimizer['discriminator'].zero_grad()
         # TODO: add noise sampler to customize noise sampling
         with torch.no_grad():
-            source_seg_logits = self.segmentor([source_imgs], [source_img_metas], return_loss=False, remain_features=True)
-            target_seg_logits = self.segmentor([target_imgs], [target_img_metas], return_loss=False, remain_features=True)
+            source_seg_logits = self.segmentor([source_imgs],
+                                               [source_img_metas],
+                                               return_loss=False,
+                                               rescale=False,
+                                               remain_features=True)
+            target_seg_logits = self.segmentor([target_imgs],
+                                               [target_img_metas],
+                                               return_loss=False,
+                                               rescale=False,
+                                               remain_features=True)
 
-        source_seg_logits = torch.cat([torch.from_numpy(x).unsqueeze(0) for x in source_seg_logits], dim=0)
-        target_seg_logits = torch.cat([torch.from_numpy(x).unsqueeze(0) for x in target_seg_logits], dim=0)
-
+        source_seg_logits = torch.cat(
+            [torch.from_numpy(x).unsqueeze(0) for x in source_seg_logits],
+            dim=0)
+        target_seg_logits = torch.cat(
+            [torch.from_numpy(x).unsqueeze(0) for x in target_seg_logits],
+            dim=0)
 
         # disc pred for target imgs and source imgs
         disc_pred_target = self.discriminator(target_seg_logits)
@@ -201,9 +212,11 @@ class DANNet(BaseGAN):
         set_requires_grad(self.discriminator, False)
         optimizer['segmentor'].zero_grad()
 
-        source_losses = self.segmentor(source_imgs, source_img_metas, gt_semantic_seg=source_gt_masks)
+        source_losses = self.segmentor(source_imgs,
+                                       source_img_metas,
+                                       gt_semantic_seg=source_gt_masks)
         loss_seg, log_vars_seg = self._parse_losses(source_losses)
-        
+
         # prepare for backward in ddp. If you do not call this function before
         # back propagation, the ddp will not dynamically find the used params
         # in current computation.

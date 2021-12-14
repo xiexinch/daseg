@@ -2,6 +2,7 @@ from copy import deepcopy
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn.parallel.distributed import _find_tensors
 
 from mmseg.models import build_segmentor, build_loss as build_seg_loss
@@ -102,13 +103,18 @@ class DANNet(BaseGAN):
                    use_apex_amp=False,
                    running_status=None):
         # get source images
-        source_imgs = source_data_batch['img'].data
-        source_gt_masks = source_data_batch['gt_semantic_seg'].data
-        target_imgs = target_data_batch['img'].data
-        print(type(source_imgs), source_imgs.shape)
-        print(type(source_gt_masks), source_gt_masks.shape)
-        print(type(target_imgs), target_imgs.shape)
-        raise "123"
+        # source_imgs = source_data_batch['img'].data
+        # source_gt_masks = source_data_batch['gt_semantic_seg'].data
+        # target_imgs = target_data_batch['img'].data
+        source_imgs = source_data_batch['img']
+        source_gt_masks = source_data_batch['gt_semantic_seg']
+        source_img_metas = source_data_batch['img_metas']
+        target_imgs = target_data_batch['img']
+        target_img_metas = target_data_batch['img_metas']
+        # print(type(source_imgs), source_imgs.shape)
+        # print(type(source_gt_masks), source_gt_masks.shape)
+        # print(type(target_imgs), target_imgs.shape)
+        # raise "123"
         # print(data_batch.keys())
         # source_imgs, source_gt_masks, target_imgs = data_batch
 
@@ -130,8 +136,12 @@ class DANNet(BaseGAN):
         optimizer['discriminator'].zero_grad()
         # TODO: add noise sampler to customize noise sampling
         with torch.no_grad():
-            source_seg_logits = self.segmentor.forward_dummy(source_imgs)
-            target_seg_logits = self.segmentor.forward_dummy(target_imgs)
+            source_seg_logits = self.segmentor([source_imgs], [source_img_metas], return_loss=False, remain_features=True)
+            target_seg_logits = self.segmentor([target_imgs], [target_img_metas], return_loss=False, remain_features=True)
+
+        source_seg_logits = torch.cat([torch.from_numpy(x).unsqueeze(0) for x in source_seg_logits], dim=0)
+        target_seg_logits = torch.cat([torch.from_numpy(x).unsqueeze(0) for x in target_seg_logits], dim=0)
+
 
         # disc pred for target imgs and source imgs
         disc_pred_target = self.discriminator(target_seg_logits)
@@ -191,25 +201,9 @@ class DANNet(BaseGAN):
         set_requires_grad(self.discriminator, False)
         optimizer['segmentor'].zero_grad()
 
-        # TODO: add noise sampler to customize noise sampling
-        target_seg_logits = self.segmentor.forward_dummy(target_imgs)
-        source_seg_logits = self.segmentor.forward_dummy(source_imgs)
-        disc_pred_target = self.discriminator(target_seg_logits)
-        disc_pred_source = self.discriminator(source_seg_logits)
-
-        data_dict_ = dict(
-            segmentor=self.segmentor,
-            disc=self.discriminator,
-            disc_pred_target=disc_pred_target,
-            disc_pred_source=disc_pred_source,
-            #   target_imgs=target_imgs,
-            #   source_imgs=source_imgs,
-            source_seg_logits=source_seg_logits,
-            source_gt_masks=source_gt_masks,
-            iteration=curr_iter,
-            batch_size=batch_size,
-            loss_scaler=loss_scaler)
-        loss_seg, log_vars_seg = self._get_seg_loss(data_dict_)
+        source_losses = self.segmentor(source_imgs, source_img_metas, gt_semantic_seg=source_gt_masks)
+        loss_seg, log_vars_seg = self._parse_losses(source_losses)
+        
         # prepare for backward in ddp. If you do not call this function before
         # back propagation, the ddp will not dynamically find the used params
         # in current computation.

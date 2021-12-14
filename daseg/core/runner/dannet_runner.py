@@ -25,7 +25,8 @@ class TwoDataloaderRunner(DynamicIterBasedRunner):
 
         self.source_loader = source_dataloader
         self.target_loader = target_dataloader
-        self._epoch = target_dataloader.epoch
+        self.data_loader = self.target_loader
+        self._epoch = self.data_loader.epoch
         self.call_hook('before_fetch_train_data')
         source_data_batch = next(self.source_loader)
         target_data_batch = next(self.target_loader)

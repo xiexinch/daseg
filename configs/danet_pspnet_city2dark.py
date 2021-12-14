@@ -7,6 +7,8 @@ runner = dict(type='TwoDataloaderRunner',
               is_dynamic_ddp=False,
               pass_training_status=True)
 
+use_ddp_wrapper = True
+find_unused_parameters = False
 # define optimizer
 optimizer = dict(segmentor=dict(type='SGD',
                                 lr=0.01,

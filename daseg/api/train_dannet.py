@@ -205,4 +205,5 @@ def train_dannet(model,
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
-    runner.run(data_loaders, cfg.workflow, cfg.total_iters)
+    runner.run(source_data_loaders, target_data_loaders, cfg.workflow,
+               cfg.total_iters)

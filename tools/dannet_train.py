@@ -14,7 +14,7 @@ from mmgen import __version__
 from mmgen.apis import set_random_seed
 from mmgen.utils import collect_env, get_root_logger
 
-from daseg.datasets import build_dataset
+from mmseg.datasets import build_dataset
 from daseg.models import build_model
 from daseg.api import train_dannet
 

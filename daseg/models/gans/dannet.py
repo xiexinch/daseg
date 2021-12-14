@@ -102,9 +102,13 @@ class DANNet(BaseGAN):
                    use_apex_amp=False,
                    running_status=None):
         # get source images
-        source_imgs = source_data_batch['img']
-        source_gt_masks = source_data_batch['gt_semantic_mask']
-        target_imgs = target_data_batch['img']
+        source_imgs = source_data_batch['img'].data
+        source_gt_masks = source_data_batch['gt_semantic_seg'].data
+        target_imgs = target_data_batch['img'].data
+        print(type(source_imgs), source_imgs.shape)
+        print(type(source_gt_masks), source_gt_masks.shape)
+        print(type(target_imgs), target_imgs.shape)
+        raise "123"
         # print(data_batch.keys())
         # source_imgs, source_gt_masks, target_imgs = data_batch
 

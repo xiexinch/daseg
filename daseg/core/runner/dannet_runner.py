@@ -26,6 +26,7 @@ class TwoDataloaderRunner(DynamicIterBasedRunner):
         self.source_loader = source_dataloader
         self.target_loader = target_dataloader
         self.data_loader = self.target_loader
+        # self.data_loader = self.source_loader
         self._epoch = self.data_loader.epoch
         self.call_hook('before_fetch_train_data')
         source_data_batch = next(self.source_loader)
@@ -97,6 +98,8 @@ class TwoDataloaderRunner(DynamicIterBasedRunner):
 
         source_iter_loaders = [IterLoader(x, self) for x in source_dataloader]
         target_iter_loaders = [IterLoader(x, self) for x in target_dataloader]
+        # source_iter_loaders = [IterLoader(x) for x in source_dataloader]
+        # target_iter_loaders = [IterLoader(x) for x in target_dataloader]
 
         self.call_hook('before_epoch')
 

@@ -53,17 +53,21 @@ mix_dataset_pipeline_train = [
          meta_keys=[])
 ]
 
-source_dataset_cfg_train = dict(type=source_dataset_type,
-                                data_root=source_data_root,
-                                img_dir='leftImg8bit/train',
-                                ann_dir='gtFine/train',
-                                pipeline=train_pipeline)
+source_dataset_cfg_train = dict(type='RepeatDataset',
+                                times=1000,
+                                dataset=dict(type=source_dataset_type,
+                                             data_root=source_data_root,
+                                             img_dir='leftImg8bit/train',
+                                             ann_dir='gtFine/train',
+                                             pipeline=train_pipeline))
 
-target_dataset_cfg_train = dict(type=target_dataset_type,
-                                data_root=target_data_root,
-                                img_dir='train/rgb_anon/train',
-                                ann_dir=None,
-                                pipeline=target_train_pipeline)
+target_dataset_cfg_train = dict(type='RepeatDataset',
+                                times=1000,
+                                dataset=dict(type=target_dataset_type,
+                                             data_root=target_data_root,
+                                             img_dir='train/rgb_anon/train',
+                                             ann_dir=None,
+                                             pipeline=target_train_pipeline))
 target_dataset_cfg_test = dict(type=target_dataset_type,
                                data_root=target_data_root,
                                img_dir='val/rgb_anon/val/night',

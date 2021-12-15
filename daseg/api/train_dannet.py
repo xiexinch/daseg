@@ -62,7 +62,7 @@ def train_dannet(model,
             # cfg.gpus will be ignored if distributed
             len(cfg.gpu_ids),
             dist=distributed,
-            persistent_workers=cfg.data.get('persistent_workers', True),
+            persistent_workers=cfg.data.get('persistent_workers', False),
             seed=cfg.seed) for ds in source_dataset
     ]
 
@@ -74,7 +74,7 @@ def train_dannet(model,
             # cfg.gpus will be ignored if distributed
             len(cfg.gpu_ids),
             dist=distributed,
-            persistent_workers=cfg.data.get('persistent_workers', True),
+            persistent_workers=cfg.data.get('persistent_workers', False),
             seed=cfg.seed) for ds in target_dataset
     ]
 

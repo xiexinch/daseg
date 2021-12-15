@@ -21,6 +21,7 @@ class DANNet(BaseGAN):
                  discriminator,
                  seg_loss,
                  gan_loss,
+                 lambda_adv=0.001,
                  disc_auxiliary_loss=None,
                  seg_auxiliary_loss=None,
                  segmentor_checkpoint=None,
@@ -67,6 +68,8 @@ class DANNet(BaseGAN):
                     [self.seg_auxiliary_losses])
         else:
             self.seg_auxiliary_losses = None
+
+        self.lambda_adv = lambda_adv
 
         self.train_cfg = deepcopy(train_cfg) if train_cfg else None
         self.test_cfg = deepcopy(test_cfg) if test_cfg else None
@@ -213,6 +216,14 @@ class DANNet(BaseGAN):
                                        gt_semantic_seg=source_gt_masks)
         loss_seg, log_vars_seg = self._parse_losses(source_losses)
 
+        loss_adv_target = self.gan_loss(target_seg_logits,
+                                        target_is_real=False,
+                                        is_disc=True)
+
+        loss_adv_target, loss_adv_vars = self._parse_losses(loss_adv_target)
+
+        loss_adv_target *= self.lambda_adv
+
         # prepare for backward in ddp. If you do not call this function before
         # back propagation, the ddp will not dynamically find the used params
         # in current computation.
@@ -230,6 +241,17 @@ class DANNet(BaseGAN):
             loss_seg.backward()
 
         if loss_scaler:
+            loss_scaler.scale(loss_adv_target).backward()
+        elif use_apex_amp:
+            from apex import amp
+            with amp.scale_loss(loss_adv_target,
+                                optimizer['segmentor'],
+                                loss_id=1) as scaled_loss_disc:
+                scaled_loss_disc.backward()
+        else:
+            loss_adv_target.backward()
+
+        if loss_scaler:
             loss_scaler.unscale_(optimizer['segmentor'])
             # note that we do not contain clip_grad procedure
             loss_scaler.step(optimizer['segmentor'])
@@ -240,6 +262,7 @@ class DANNet(BaseGAN):
         log_vars = {}
         log_vars.update(log_vars_seg)
         log_vars.update(log_vars_disc)
+        log_vars.update(loss_adv_vars)
 
         results = dict(target_seg_logits=target_seg_logits.cpu(),
                        source_seg_logits=source_seg_logits.cpu())

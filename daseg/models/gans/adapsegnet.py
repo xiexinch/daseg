@@ -142,33 +142,31 @@ class AdapSegNet(BaseGAN):
             curr_iter = self.iteration
 
         # train G
-        set_requires_grad(self.discriminator, False)
+        set_requires_grad(self.segmentor, True)
         optimizer['segmentor'].zero_grad()
 
+
+        # 计算 segmentor 梯度
+        source_losses = self.segmentor(source_imgs,
+                                       source_img_metas,
+                                       gt_semantic_seg=source_gt_masks)
+        loss_seg, log_vars_seg = self._parse_losses(source_losses)
+        # 更新 segmentor 权重
+        self._loss_backward(loss_seg, loss_scaler, use_apex_amp,
+                            optimizer['segmentor'])
+
         # 不计算 segmentor 梯度
-        with torch.no_grad:
+        with torch.no_grad():
             source_seg_logits = self.segmentor([source_imgs],
                                                [source_img_metas],
                                                return_loss=False,
                                                rescale=False,
                                                remain_features=True)
         # 计算 segmentor 梯度
-        source_losses = self.segmentor(source_imgs,
-                                       source_img_metas,
-                                       gt_semantic_seg=source_gt_masks)
-
-        # 计算 segmentor 梯度
         target_seg_logits = self.segmentor([target_imgs], [target_img_metas],
                                            return_loss=False,
                                            rescale=False,
                                            remain_features=True)
-
-        source_seg_logits = torch.cat(
-            [torch.from_numpy(x).unsqueeze(0) for x in source_seg_logits],
-            dim=0)
-        target_seg_logits = torch.cat(
-            [torch.from_numpy(x).unsqueeze(0) for x in target_seg_logits],
-            dim=0)
 
         # disc pred for target imgs and source imgs
         disc_pred_target = self.discriminator(target_seg_logits)
@@ -186,7 +184,6 @@ class AdapSegNet(BaseGAN):
                          loss_scaler=loss_scaler)
 
         loss_disc, log_vars_disc = self._get_disc_loss(data_dict)
-        loss_seg, log_vars_seg = self._parse_losses(source_losses)
 
         # prepare for backward in ddp. If you do not call this function before
         # back propagation, the ddp will not dynamically find the used params
@@ -198,8 +195,6 @@ class AdapSegNet(BaseGAN):
         # 更新 segmentor 权重
         self._loss_backward(loss_disc, loss_scaler, use_apex_amp,
                             optimizer['segmentor'])
-        self._loss_backward(loss_seg, loss_scaler, use_apex_amp,
-                            optimizer['segmentor'])
 
         if loss_scaler:
             loss_scaler.unscale_(optimizer['segmentor'])
@@ -207,11 +202,14 @@ class AdapSegNet(BaseGAN):
             loss_scaler.step(optimizer['segmentor'])
             # loss_scaler.update will be called in runner.train()
         else:
+            for name, param in self.segmentor.named_parameters():
+                if param.grad is None:
+                    print(name)
             optimizer['segmentor'].step()
 
         # skip discriminator training if only train segmentor for current
         # iteration
-        if (curr_iter) % self.disc_steps != 0:
+        if (curr_iter + 1) % self.disc_steps != 0:
             results = dict(target_seg_logits=target_seg_logits.cpu(),
                            source_seg_logits=source_seg_logits.cpu())
             outputs = dict(log_vars=log_vars_disc,
@@ -222,7 +220,7 @@ class AdapSegNet(BaseGAN):
             return outputs
 
         # train D
-        set_requires_grad(self.discriminator, True)
+        set_requires_grad(self.segmentor, False)
         optimizer['discriminator'].zero_grad()
 
         source_seg_logits = source_seg_logits.detach()
@@ -258,6 +256,9 @@ class AdapSegNet(BaseGAN):
             loss_scaler.step(optimizer['discriminator'])
             # loss_scaler.update will be called in runner.train()
         else:
+            for name, param in self.discriminator.named_parameters():
+                if param.grad is None:
+                    print(name)
             optimizer['discriminator'].step()
 
         log_vars = {}

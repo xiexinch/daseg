@@ -1,10 +1,12 @@
 from copy import deepcopy
+from mmgen.utils.logger import get_root_logger
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import mmcv
 from torch.nn.parallel.distributed import _find_tensors
-
+from mmcv.runner import load_checkpoint
 from mmseg.models import build_segmentor, build_loss as build_seg_loss
 from mmgen.models import (set_requires_grad, BaseGAN, build_module as
                           build_gen_module)
@@ -21,11 +23,20 @@ class DANNet(BaseGAN):
                  gan_loss,
                  disc_auxiliary_loss=None,
                  seg_auxiliary_loss=None,
+                 segmentor_checkpoint=None,
                  train_cfg=None,
                  test_cfg=None):
         super().__init__()
         self._segmentor_cfg = deepcopy(segmentor)
         self.segmentor = build_segmentor(segmentor)
+        if segmentor_checkpoint is not None:
+            try:
+                load_checkpoint(self.segmentor,
+                                segmentor_checkpoint,
+                                logger=get_root_logger())
+            except Exception as ex:
+                mmcv.print_log(ex, 'daseg')
+                mmcv.print_log('Load segmentor checkpoint failed', 'daseg')
 
         # support no discriminator in testing
         if discriminator is not None:
@@ -75,12 +86,6 @@ class DANNet(BaseGAN):
         if self.use_ema:
             # use deepcopy to guarantee the consistency
             self.segmentor_ema = deepcopy(self.segmentor)
-
-        # self.sourc_img_metas_key = 'source_img_metas'
-        # self.source_img_key = 'source_img'
-        # self.source_gt_mask_key = 'source_gt_mask'
-        # self.target_img_metas_key = 'target_img_metas'
-        # self.target_img_key = 'target_img'
 
     def _parse_test_cfg(self):
         """Parsing test config and set some attributes for testing."""
@@ -143,7 +148,7 @@ class DANNet(BaseGAN):
         target_seg_logits = torch.cat(
             [torch.from_numpy(x).unsqueeze(0) for x in target_seg_logits],
             dim=0)
-        
+
         # disc pred for target imgs and source imgs
         disc_pred_target = self.discriminator(target_seg_logits)
         disc_pred_source = self.discriminator(source_seg_logits)

@@ -143,8 +143,8 @@ class AdapSegNet(BaseGAN):
 
         # train G
         set_requires_grad(self.segmentor, True)
+        set_requires_grad(self.discriminator, False)
         optimizer['segmentor'].zero_grad()
-
 
         # 计算 segmentor 梯度
         source_losses = self.segmentor(source_imgs,
@@ -170,20 +170,13 @@ class AdapSegNet(BaseGAN):
 
         # disc pred for target imgs and source imgs
         disc_pred_target = self.discriminator(target_seg_logits)
-        disc_pred_source = self.discriminator(source_seg_logits)
 
-        # get data dict to compute losses for disc
-        data_dict = dict(segmentor=self.segmentor,
-                         disc=self.discriminator,
-                         disc_pred_target=disc_pred_target,
-                         disc_pred_source=disc_pred_source,
-                         target_imgs=target_imgs,
-                         source_imgs=source_imgs,
-                         iteration=curr_iter,
-                         batch_size=batch_size,
-                         loss_scaler=loss_scaler)
-
-        loss_disc, log_vars_disc = self._get_disc_loss(data_dict)
+        losses_dict = {}
+        # gan loss
+        losses_dict['loss_disc_target'] = self.gan_loss(
+            disc_pred_target, target_is_real=False,
+            is_disc=True) * self.lambda_adv
+        loss_disc, log_vars_disc = self._parse_losses(losses_dict)
 
         # prepare for backward in ddp. If you do not call this function before
         # back propagation, the ddp will not dynamically find the used params
@@ -202,9 +195,6 @@ class AdapSegNet(BaseGAN):
             loss_scaler.step(optimizer['segmentor'])
             # loss_scaler.update will be called in runner.train()
         else:
-            for name, param in self.segmentor.named_parameters():
-                if param.grad is None:
-                    print(name)
             optimizer['segmentor'].step()
 
         # skip discriminator training if only train segmentor for current
@@ -221,6 +211,7 @@ class AdapSegNet(BaseGAN):
 
         # train D
         set_requires_grad(self.segmentor, False)
+        set_requires_grad(self.discriminator, True)
         optimizer['discriminator'].zero_grad()
 
         source_seg_logits = source_seg_logits.detach()

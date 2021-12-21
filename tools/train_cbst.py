@@ -16,7 +16,7 @@ from torch._C import device
 from daseg.datasets.builder import build_dataloader, build_dataset
 
 from daseg.utils import get_root_logger
-from daseg.models import build_model
+from daseg.models import build_train_model
 from mmseg.apis import single_gpu_test
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 
@@ -108,9 +108,9 @@ def main():
     meta['seed'] = args.seed
     meta['exp_name'] = osp.basename(args.config)
 
-    model = build_model(cfg.model,
-                        train_cfg=cfg.train_cfg,
-                        test_cfg=cfg.test_cfg)
+    model = build_train_model(cfg.model,
+                              train_cfg=cfg.train_cfg,
+                              test_cfg=cfg.test_cfg)
     num_classes = cfg.num_classes
     source_dataset = build_dataset(cfg.data.source_dataset.train)
     target_dataset = build_dataset(cfg.data.target_dataset.train)

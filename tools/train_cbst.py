@@ -13,11 +13,12 @@ from mmcv.runner import get_dist_info, init_dist
 from mmcv.utils import get_git_hash
 from torch import distributed
 from torch._C import device
-from daseg.datasets.builder import build_dataloader, build_dataset
+from daseg.datasets.builder import build_dataloader
 
 from daseg.utils import get_root_logger
 from daseg.models import build_train_model
 from mmseg.apis import single_gpu_test
+from mmseg.datasets import build_dataset
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 
 
@@ -27,7 +28,6 @@ def parse_args():
     parser.add_argument('--work-dir', help='the dir to save logs and models')
     parser.add_argument('--resume-from',
                         help='the checkpoint file to resume from')
-    parser.add_argument('--seed', type=int, default=2021, help='random seed')
     group_gpus = parser.add_mutually_exclusive_group()
     group_gpus.add_argument('--gpus',
                             type=int,
@@ -54,8 +54,6 @@ def parse_args():
                         default='none',
                         help='job launcher')
     args = parser.parse_args()
-    if 'LOCAL_RANK' not in os.environ:
-        os.environ['LOCAL_RANK'] = str(args.local_rank)
     return args
 
 
@@ -140,3 +138,7 @@ def main():
 
         for idx_cls in range(num_classes):
             idx = results == idx_cls
+
+
+if __name__ == '__main__':
+    main()

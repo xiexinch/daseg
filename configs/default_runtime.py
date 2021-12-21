@@ -1,4 +1,4 @@
-checkpoint_config = dict(interval=2000, by_epoch=False)
+checkpoint_config = dict(interval=5000, by_epoch=False)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -27,5 +27,5 @@ workflow = [('train', 10000)]
 find_unused_parameters = True
 cudnn_benchmark = True
 
-total_iters = 20000
-evaluation = dict(interval=2000, metric='mIoU', pre_eval=True)
+total_iters = 125000
+evaluation = dict(interval=1000, metric='mIoU', pre_eval=True)

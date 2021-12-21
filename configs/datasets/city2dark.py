@@ -54,7 +54,7 @@ mix_dataset_pipeline_train = [
 ]
 
 source_dataset_cfg_train = dict(type='RepeatDataset',
-                                times=1000,
+                                times=10000,
                                 dataset=dict(type=source_dataset_type,
                                              data_root=source_data_root,
                                              img_dir='leftImg8bit/train',
@@ -62,7 +62,7 @@ source_dataset_cfg_train = dict(type='RepeatDataset',
                                              pipeline=train_pipeline))
 
 target_dataset_cfg_train = dict(type='RepeatDataset',
-                                times=1000,
+                                times=10000,
                                 dataset=dict(type=target_dataset_type,
                                              data_root=target_data_root,
                                              img_dir='train/rgb_anon/train',

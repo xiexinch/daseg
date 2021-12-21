@@ -1,5 +1,6 @@
 _base_ = [
-    'base_models/adapsegnet.py', 'datasets/city2dark.py', 'default_runtime.py'
+    'base_models/adapsegnet_deeplabv3.py', 'datasets/city2dark.py',
+    'default_runtime.py'
 ]
 
 # use dynamic runner

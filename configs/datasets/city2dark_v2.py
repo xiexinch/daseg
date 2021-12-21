@@ -31,6 +31,21 @@ target_train_pipeline = [
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img']),
 ]
+source_test_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(
+        type='MultiScaleFlipAug',
+        img_scale=(2048, 1024),
+        # img_ratios=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
+        flip=False,
+        transforms=[
+            dict(type='Resize', keep_ratio=True),
+            dict(type='RandomFlip'),
+            dict(type='Normalize', **img_norm_cfg),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type='Collect', keys=['img']),
+        ])
+]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
@@ -86,7 +101,7 @@ data = dict(samples_per_gpu=2,
                                           data_root=source_data_root,
                                           img_dir='leftImg8bit/val',
                                           ann_dir='gtFine/val',
-                                          pipeline=train_pipeline)),
+                                          pipeline=source_test_pipeline)),
             target_dataset=dict(train=dict(type=target_dataset_type,
                                            data_root=target_data_root,
                                            img_dir='train/rgb_anon/train',

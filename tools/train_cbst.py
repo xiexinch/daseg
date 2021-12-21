@@ -3,6 +3,7 @@ import copy
 import os
 import os.path as osp
 import time
+from mmseg.models.builder import build_segmentor
 
 import numpy as np
 import mmcv
@@ -13,12 +14,13 @@ from mmcv.runner import get_dist_info, init_dist
 from mmcv.utils import get_git_hash
 from torch import distributed
 from torch._C import device
-from daseg.datasets.builder import build_dataloader
+from torch.utils.data import DataLoader
+# from daseg.datasets.builder import build_dataloader
 
 from daseg.utils import get_root_logger
 from daseg.models import build_train_model
 from mmseg.apis import single_gpu_test
-from mmseg.datasets import build_dataset
+from mmseg.datasets import build_dataset, build_dataloader
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 
 
@@ -118,22 +120,23 @@ def main():
     num_rounds = cfg.get('num_rounds', 4)
     epoch_per_round = cfg.get('epoch_per_round', 2)
 
+    source_test_dataset = build_dataset(cfg.data.source_dataset.test)
+    test_dataloader = build_dataloader(source_test_dataset,
+                                       samples_per_gpu=1,
+                                       workers_per_gpu=2,
+                                       dist=False,
+                                       shuffle=False,
+                                       persistent_workers=False)
+
     for round_idx in range(num_rounds):
-        source_test_dataset = build_dataset(cfg.data.source_dataset.test)
-        test_dataloader = build_dataloader(source_test_dataset,
-                                           samples_per_gpu=1,
-                                           workers_per_gpu=2,
-                                           dist=distributed,
-                                           shuffle=False,
-                                           persistent_workers=False)
+
         test_model = MMDataParallel(model, device_ids=[0])
+
         results = single_gpu_test(
             test_model,
             test_dataloader,
-            show=False,
-        )
-
-        conf_dict = {k: [] for k in range()}
+            show=False)
+        conf_dict = {k: [] for k in range(num_classes)}
         pred_cls_num = np.zeros(num_classes)
 
         for idx_cls in range(num_classes):

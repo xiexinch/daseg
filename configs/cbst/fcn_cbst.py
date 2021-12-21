@@ -5,7 +5,6 @@ model = dict(
     type='UDA',
     model=dict(
         type='EncoderDecoder',
-        pretrained='open-mmlab://resnet50_v1c',
         backbone=dict(type='ResNetV1c',
                       depth=50,
                       num_stages=4,
@@ -47,7 +46,7 @@ model = dict(
         test_cfg=dict(mode='whole')))
 
 train_cfg = None
-test_cfg = None
+test_cfg = dict(mode='whole')
 
 num_classes = 19
 cudnn_benchmark = False

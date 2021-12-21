@@ -1,6 +1,7 @@
 from mmseg.models.builder import SEGMENTORS
 import torch.nn as nn
 from mmcv.utils import Registry, build_from_cfg
+from mmseg.models import SEGMENTORS
 
 MODELS = Registry('model')
 MODULES = Registry('module')
@@ -34,8 +35,8 @@ def build_train_model(cfg, train_cfg=None, test_cfg=None):
         cfg.uda['model'] = cfg.model
         cfg.uda['max_iters'] = cfg.runner.max_iters
         return UDA.build(cfg.model,
-                         defaut_args=dict(train_cfg=train_cfg,
-                                          test_cfg=test_cfg))
+                         default_args=dict(train_cfg=train_cfg,
+                                           test_cfg=test_cfg))
     else:
         return SEGMENTORS.build(cfg.model,
                                 default_args=dict(train_cfg=train_cfg,

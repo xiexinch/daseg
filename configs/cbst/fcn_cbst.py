@@ -1,6 +1,7 @@
 _base_ = ['../datasets/city2dark_v2.py']
 
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+# norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='BN', requires_grad=True)
 model = dict(
     type='UDA',
     model=dict(

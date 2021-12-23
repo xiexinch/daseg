@@ -3,11 +3,12 @@ import copy
 import os
 import os.path as osp
 import time
-from mmseg.models.builder import build_segmentor
+import math
 
 import numpy as np
 import mmcv
 from mmcv.runner.utils import set_random_seed
+from numpy.core.fromnumeric import nonzero
 import torch
 from mmcv import Config, DictAction
 from mmcv.runner import get_dist_info, init_dist
@@ -19,9 +20,10 @@ from torch.utils.data import DataLoader
 
 from daseg.utils import get_root_logger
 from daseg.models import build_train_model
-from mmseg.apis import single_gpu_test
+from mmseg.apis import single_gpu_forward
 from mmseg.datasets import build_dataset, build_dataloader
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
+from mmseg.models.builder import build_segmentor
 
 
 def parse_args():
@@ -132,15 +134,43 @@ def main():
 
         test_model = MMDataParallel(model, device_ids=[0])
 
-        results = single_gpu_test(
-            test_model,
-            test_dataloader,
-            show=False)
+        # numpy array
+        labels, confs = single_gpu_forward(test_model, test_dataloader)
         conf_dict = {k: [] for k in range(num_classes)}
         pred_cls_num = np.zeros(num_classes)
 
+        # get confidence vectors
+        for i, seg_logits in enumerate(labels):
+            for idx_cls in range(num_classes):
+                cls_hit_map = seg_logits == idx_cls
+                pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + np.sum(
+                    cls_hit_map)
+                if cls_hit_map.any():
+                    conf_cls_temp = confs[i].astype(np.float32)
+                    len_cls_temp = conf_cls_temp.size
+                    conf_cls = conf_cls_temp[0:len_cls_temp:4]
+                    conf_dict[idx_cls].extend(conf_cls)
+
+        # kc parameters
+        cls_thresh = np.ones(num_classes, dtype=np.float32)  # 阈值
+        cls_select_size = np.zeros(num_classes, dtype=np.float32)  # ？这是什么
+        cls_size = np.zeros(num_classes, dtype=np.float32)
+        # class-balance
         for idx_cls in range(num_classes):
-            idx = results == idx_cls
+            cls_size[idx_cls] = pred_cls_num[idx_cls]
+            if conf_dict[idx_cls] != None:
+                conf_cls[idx_cls].sort(reverse=True)
+                len_cls = len(conf_dict[idx_cls])
+                cls_select_size[idx_cls] = int(
+                    math.floor(len_cls * cfg.target_portion))
+                len_cls_thresh = int(cls_select_size[idx_cls])  # 取前 q%
+                if len_cls_thresh != 0:
+                    cls_thresh[idx_cls] = conf_dict[idx_cls][len_cls_thresh -
+                                                             1]
+                conf_dict[idx_cls] = None
+
+        # mine_id 是什么意思
+        num_mine_id = len(np.nonzero(cls_size / np.sum(cls_size) < 1e-3)[0])
 
 
 if __name__ == '__main__':

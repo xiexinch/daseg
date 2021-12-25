@@ -4,6 +4,7 @@ import os
 import os.path as osp
 import time
 import math
+import shutil
 from PIL import Image
 
 import numpy as np
@@ -150,11 +151,13 @@ def main():
                                            cfg.temp_dirs)
         conf_dict = {k: [] for k in range(num_classes)}
         pred_cls_num = np.zeros(num_classes)
-
         # get confidence vectors
+        print()
+        logger.info('get confidence vectors')
+        prog_bar = mmcv.ProgressBar(len(labels))
         for i, label_path in enumerate(labels):
-            seg_logits = np.load(label_path)
-            conf = np.load(confs[i])
+            seg_logits = np.load(label_path)[0]
+            conf = np.load(confs[i])[0]
             for idx_cls in range(num_classes):
                 cls_hit_map = seg_logits == idx_cls
                 pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + np.sum(
@@ -165,8 +168,11 @@ def main():
                     len_cls_temp = conf_cls_temp.size
                     conf_cls = conf_cls_temp[0:len_cls_temp:4]
                     conf_dict[idx_cls].extend(conf_cls)
+            prog_bar.update()
 
         # kc parameters
+        print()
+        logger.info('kc parameters')
         cls_thresh = np.ones(num_classes, dtype=np.float32)  # 阈值
         cls_select_size = np.zeros(num_classes, dtype=np.float32)  # ？这是什么
         cls_size = np.zeros(num_classes, dtype=np.float32)
@@ -206,7 +212,7 @@ def main():
         for batch_indices, data in zip(loader_indices,
                                        target_train_dataloader):
             for i in batch_indices:
-                conf = np.load(confs[i])
+                conf = np.load(confs[i]).squeeze(0)
                 weighted_prob = conf.transpose(1, 2, 0) / cls_thresh
                 weighted_pred_trainIDs = np.asarray(np.argmax(weighted_prob,
                                                               axis=2),
@@ -222,14 +228,18 @@ def main():
                 mmcv.mkdir_or_exist(save_dir)
                 Image.fromarray(weighted_pred_trainIDs.astype(
                     np.uint8)).save(save_path)
+        logger.info('pseudo-label generation finished')
+        # 删除临时结果
+        shutil.rmtree(cfg.temp_dirs)
+
         target_dataset_cfg = cfg.data.target_dataset.train
         target_dataset_cfg['ann_dir'] = target_pseudo_label_path.replace(
             target_dataset_cfg['data_root'], '')
         target_dataset = build_dataset(target_dataset_cfg)
 
-        mix_dataset = ConcatDataset(
-            [RepeatDataset(source_dataset, 4), target_dataset])
-
+        # mix_dataset = ConcatDataset(
+        #     [RepeatDataset(source_dataset, 4), target_dataset])
+        mix_dataset = ConcatDataset([source_dataset, target_dataset])
         mix_dataloader = build_dataloader(mix_dataset,
                                           samples_per_gpu=4,
                                           workers_per_gpu=2,
@@ -245,7 +255,6 @@ def main():
                                   work_dir=f'{cfg.work_dir}/round_{round_idx}',
                                   logger=logger,
                                   meta=meta))
-        print(lr_config)
         # register hooks
         runner.register_training_hooks(lr_config, optimizer_config,
                                        checkpoint_config, log_config,

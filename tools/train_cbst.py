@@ -12,14 +12,14 @@ from mmcv.runner.utils import set_random_seed
 import torch
 from mmcv import Config, DictAction
 from mmcv.runner import (get_dist_info, init_dist, HOOKS, build_optimizer,
-                         build_runner)
+                         build_runner, load_checkpoint, load_state_dict)
 from torch.utils.data import ConcatDataset
 
 from daseg.utils import get_root_logger
 from daseg.models import build_train_model
 from mmseg.apis import single_gpu_forward
 from mmseg.core import DistEvalHook, EvalHook
-from mmseg.datasets import build_dataset, build_dataloader
+from mmseg.datasets import build_dataset, build_dataloader, RepeatDataset
 from mmcv.parallel import MMDataParallel
 from mmcv.utils import build_from_cfg
 
@@ -111,6 +111,8 @@ def main():
     model = build_train_model(cfg.model,
                               train_cfg=cfg.train_cfg,
                               test_cfg=cfg.test_cfg)
+    load_checkpoint(model, cfg.model_checkpoint)
+
     num_classes = cfg.num_classes
     source_dataset = build_dataset(cfg.data.source_dataset.train)
     target_dataset = build_dataset(cfg.data.target_dataset.pretrain)
@@ -128,23 +130,37 @@ def main():
                                                shuffle=False,
                                                persistent_workers=False)
     target_portion = cfg.target_portion
+    model = MMDataParallel(model, device_ids=[0])
+    # pseudo-label list: delete after training
+    pseudo_label_list = []
+    train_model = copy.deepcopy(model)
+    test_model = copy.deepcopy(model)
+    optimizer = build_optimizer(train_model, cfg.optimizer)
     for round_idx in range(num_rounds):
 
-        test_model = MMDataParallel(model, device_ids=[0])
-
+        # runner config
+        lr_config = copy.deepcopy(cfg.lr_config)
+        optimizer_config = copy.deepcopy(cfg.optimizer_config)
+        checkpoint_config = copy.deepcopy(cfg.checkpoint_config)
+        log_config = copy.deepcopy(cfg.log_config)
+        momentum_config = copy.deepcopy(cfg.get('momentum_config', None))
         # numpy array
-        labels, confs = single_gpu_forward(test_model, target_train_dataloader)
+
+        labels, confs = single_gpu_forward(test_model, target_train_dataloader,
+                                           cfg.temp_dirs)
         conf_dict = {k: [] for k in range(num_classes)}
         pred_cls_num = np.zeros(num_classes)
 
         # get confidence vectors
-        for i, seg_logits in enumerate(labels):
+        for i, label_path in enumerate(labels):
+            seg_logits = np.load(label_path)
+            conf = np.load(confs[i])
             for idx_cls in range(num_classes):
                 cls_hit_map = seg_logits == idx_cls
                 pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + np.sum(
                     cls_hit_map)
                 if cls_hit_map.any():
-                    conf_cls_temp = confs[i][idx_cls][cls_hit_map].astype(
+                    conf_cls_temp = conf[idx_cls][cls_hit_map].astype(
                         np.float32)
                     len_cls_temp = conf_cls_temp.size
                     conf_cls = conf_cls_temp[0:len_cls_temp:4]
@@ -184,45 +200,56 @@ def main():
         logger.info('pseudo-label generation')
 
         loader_indices = target_train_dataloader.batch_sampler
+        target_dataroot = cfg.data.target_dataset.train['data_root']
+        target_img_dir = cfg.data.target_dataset.train['img_dir']
+        target_img_prefix = target_dataroot + target_img_dir
         for batch_indices, data in zip(loader_indices,
                                        target_train_dataloader):
             for i in batch_indices:
-                weighted_prob = confs[i].transpose(1, 2, 0) / cls_thresh
+                conf = np.load(confs[i])
+                weighted_prob = conf.transpose(1, 2, 0) / cls_thresh
                 weighted_pred_trainIDs = np.asarray(np.argmax(weighted_prob,
                                                               axis=2),
                                                     dtype=np.uint8)
-                seg_map_filename = data['img_metas'][0].data[0][0][
-                    'filename'].replace('\\', '/').split('/')[-1].replace(
+                seg_map_path = data['img_metas'][0].data[0][0][
+                    'filename'].replace(target_img_prefix, '').replace(
                         target_train_dataloader.dataset.img_suffix,
                         target_train_dataloader.dataset.seg_map_suffix)
-                save_path = osp.join(target_pseudo_label_path,
-                                     seg_map_filename)
+                img_name = seg_map_path.split('/')[-1]
+                save_path = target_pseudo_label_path + seg_map_path
+                pseudo_label_list.append(save_path)
+                save_dir = save_path.replace(img_name, '')
+                mmcv.mkdir_or_exist(save_dir)
                 Image.fromarray(weighted_pred_trainIDs.astype(
                     np.uint8)).save(save_path)
-        target_dataset_cfg = cfg.data.target_dataset.pretrain
-        target_dataset_cfg['ann_dir'] = target_pseudo_label_path
+        target_dataset_cfg = cfg.data.target_dataset.train
+        target_dataset_cfg['ann_dir'] = target_pseudo_label_path.replace(
+            target_dataset_cfg['data_root'], '')
         target_dataset = build_dataset(target_dataset_cfg)
 
-        mix_dataset = ConcatDataset([source_dataset, target_dataset])
+        mix_dataset = ConcatDataset(
+            [RepeatDataset(source_dataset, 4), target_dataset])
 
         mix_dataloader = build_dataloader(mix_dataset,
-                                          samples_per_gpu=1,
+                                          samples_per_gpu=4,
                                           workers_per_gpu=2,
                                           dist=False,
                                           shuffle=False,
                                           persistent_workers=False)
-
-        train_model = MMDataParallel(model, device_ids=[0])
-
-        optimizer = build_optimizer(train_model, cfg.optimizer)
-
+        train_model.train()
         runner = build_runner(cfg.runner,
-                              default_args=dict(model=train_model,
-                                                batch_processor=None,
-                                                optimizer=optimizer,
-                                                work_dir=cfg.work_dir,
-                                                logger=logger,
-                                                meta=meta))
+                              default_args=dict(
+                                  model=train_model,
+                                  batch_processor=None,
+                                  optimizer=optimizer,
+                                  work_dir=f'{cfg.work_dir}/round_{round_idx}',
+                                  logger=logger,
+                                  meta=meta))
+        print(lr_config)
+        # register hooks
+        runner.register_training_hooks(lr_config, optimizer_config,
+                                       checkpoint_config, log_config,
+                                       momentum_config)
         runner.timestamp = timestamp
         # register eval hooks
 
@@ -257,6 +284,8 @@ def main():
         # elif cfg.load_from:
         #     runner.load_checkpoint(cfg.load_from)
         runner.run([mix_dataloader], cfg.workflow)
+        train_model = copy.deepcopy(model)
+        test_model = copy.deepcopy(model)
 
 
 if __name__ == '__main__':

@@ -4,26 +4,24 @@ import os
 import os.path as osp
 import time
 import math
+from PIL import Image
 
 import numpy as np
 import mmcv
 from mmcv.runner.utils import set_random_seed
-from numpy.core.fromnumeric import nonzero
 import torch
 from mmcv import Config, DictAction
-from mmcv.runner import get_dist_info, init_dist
-from mmcv.utils import get_git_hash
-from torch import distributed
-from torch._C import device
-from torch.utils.data import DataLoader
-# from daseg.datasets.builder import build_dataloader
+from mmcv.runner import (get_dist_info, init_dist, HOOKS, build_optimizer,
+                         build_runner)
+from torch.utils.data import ConcatDataset
 
 from daseg.utils import get_root_logger
 from daseg.models import build_train_model
 from mmseg.apis import single_gpu_forward
+from mmseg.core import DistEvalHook, EvalHook
 from mmseg.datasets import build_dataset, build_dataloader
-from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
-from mmseg.models.builder import build_segmentor
+from mmcv.parallel import MMDataParallel
+from mmcv.utils import build_from_cfg
 
 
 def parse_args():
@@ -115,27 +113,27 @@ def main():
                               test_cfg=cfg.test_cfg)
     num_classes = cfg.num_classes
     source_dataset = build_dataset(cfg.data.source_dataset.train)
-    target_dataset = build_dataset(cfg.data.target_dataset.train)
+    target_dataset = build_dataset(cfg.data.target_dataset.pretrain)
     target_pseudo_label_path = cfg.data.target_pseudo_path
     mmcv.mkdir_or_exist(target_pseudo_label_path)
 
     num_rounds = cfg.get('num_rounds', 4)
     epoch_per_round = cfg.get('epoch_per_round', 2)
 
-    source_test_dataset = build_dataset(cfg.data.source_dataset.test)
-    test_dataloader = build_dataloader(source_test_dataset,
-                                       samples_per_gpu=1,
-                                       workers_per_gpu=2,
-                                       dist=False,
-                                       shuffle=False,
-                                       persistent_workers=False)
-
+    # source_test_dataset = build_dataset(cfg.data.source_dataset.test)
+    target_train_dataloader = build_dataloader(target_dataset,
+                                               samples_per_gpu=1,
+                                               workers_per_gpu=2,
+                                               dist=False,
+                                               shuffle=False,
+                                               persistent_workers=False)
+    target_portion = cfg.target_portion
     for round_idx in range(num_rounds):
 
         test_model = MMDataParallel(model, device_ids=[0])
 
         # numpy array
-        labels, confs = single_gpu_forward(test_model, test_dataloader)
+        labels, confs = single_gpu_forward(test_model, target_train_dataloader)
         conf_dict = {k: [] for k in range(num_classes)}
         pred_cls_num = np.zeros(num_classes)
 
@@ -146,7 +144,8 @@ def main():
                 pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + np.sum(
                     cls_hit_map)
                 if cls_hit_map.any():
-                    conf_cls_temp = confs[i].astype(np.float32)
+                    conf_cls_temp = confs[i][idx_cls][cls_hit_map].astype(
+                        np.float32)
                     len_cls_temp = conf_cls_temp.size
                     conf_cls = conf_cls_temp[0:len_cls_temp:4]
                     conf_dict[idx_cls].extend(conf_cls)
@@ -158,11 +157,11 @@ def main():
         # class-balance
         for idx_cls in range(num_classes):
             cls_size[idx_cls] = pred_cls_num[idx_cls]
-            if conf_dict[idx_cls] != None:
-                conf_cls[idx_cls].sort(reverse=True)
+            if conf_dict[idx_cls] is not None:
+                conf_dict[idx_cls].sort(reverse=True)
                 len_cls = len(conf_dict[idx_cls])
                 cls_select_size[idx_cls] = int(
-                    math.floor(len_cls * cfg.target_portion))
+                    math.floor(len_cls * target_portion))
                 len_cls_thresh = int(cls_select_size[idx_cls])  # 取前 q%
                 if len_cls_thresh != 0:
                     cls_thresh[idx_cls] = conf_dict[idx_cls][len_cls_thresh -
@@ -171,6 +170,93 @@ def main():
 
         # mine_id 是什么意思
         num_mine_id = len(np.nonzero(cls_size / np.sum(cls_size) < 1e-3)[0])
+        # choose the min mine_id
+        id_all = np.argsort(cls_size / np.sum(cls_size))
+        rare_id = id_all[:cfg.rare_cls_nums]
+        mine_id = id_all[:num_mine_id]
+
+        # 逐步增大 target 阈值
+        target_portion = min(target_portion + cfg.target_port_step,
+                             cfg.max_target_portion)
+
+        # 生成伪标签
+        print()
+        logger.info('pseudo-label generation')
+
+        loader_indices = target_train_dataloader.batch_sampler
+        for batch_indices, data in zip(loader_indices,
+                                       target_train_dataloader):
+            for i in batch_indices:
+                weighted_prob = confs[i].transpose(1, 2, 0) / cls_thresh
+                weighted_pred_trainIDs = np.asarray(np.argmax(weighted_prob,
+                                                              axis=2),
+                                                    dtype=np.uint8)
+                seg_map_filename = data['img_metas'][0].data[0][0][
+                    'filename'].replace('\\', '/').split('/')[-1].replace(
+                        target_train_dataloader.dataset.img_suffix,
+                        target_train_dataloader.dataset.seg_map_suffix)
+                save_path = osp.join(target_pseudo_label_path,
+                                     seg_map_filename)
+                Image.fromarray(weighted_pred_trainIDs.astype(
+                    np.uint8)).save(save_path)
+        target_dataset_cfg = cfg.data.target_dataset.pretrain
+        target_dataset_cfg['ann_dir'] = target_pseudo_label_path
+        target_dataset = build_dataset(target_dataset_cfg)
+
+        mix_dataset = ConcatDataset([source_dataset, target_dataset])
+
+        mix_dataloader = build_dataloader(mix_dataset,
+                                          samples_per_gpu=1,
+                                          workers_per_gpu=2,
+                                          dist=False,
+                                          shuffle=False,
+                                          persistent_workers=False)
+
+        train_model = MMDataParallel(model, device_ids=[0])
+
+        optimizer = build_optimizer(train_model, cfg.optimizer)
+
+        runner = build_runner(cfg.runner,
+                              default_args=dict(model=train_model,
+                                                batch_processor=None,
+                                                optimizer=optimizer,
+                                                work_dir=cfg.work_dir,
+                                                logger=logger,
+                                                meta=meta))
+        runner.timestamp = timestamp
+        # register eval hooks
+
+        val_dataset = build_dataset(cfg.data.target_dataset.test,
+                                    dict(test_mode=True))
+        val_dataloader = build_dataloader(
+            val_dataset,
+            samples_per_gpu=1,
+            workers_per_gpu=cfg.data.workers_per_gpu,
+            dist=distributed,
+            shuffle=False)
+        eval_cfg = cfg.get('evaluation', {})
+        eval_cfg['by_epoch'] = cfg.runner['type'] != 'IterBasedRunner'
+        eval_hook = DistEvalHook if distributed else EvalHook
+        runner.register_hook(eval_hook(val_dataloader, **eval_cfg),
+                             priority='LOW')
+        # user-defined hooks
+        if cfg.get('custom_hooks', None):
+            custom_hooks = cfg.custom_hooks
+            assert isinstance(custom_hooks, list), \
+                f'custom_hooks expect list type, but got {type(custom_hooks)}'
+            for hook_cfg in cfg.custom_hooks:
+                assert isinstance(hook_cfg, dict), \
+                    'Each item in custom_hooks expects dict type, but got ' \
+                    f'{type(hook_cfg)}'
+                hook_cfg = hook_cfg.copy()
+                priority = hook_cfg.pop('priority', 'NORMAL')
+                hook = build_from_cfg(hook_cfg, HOOKS)
+                runner.register_hook(hook, priority=priority)
+        # if cfg.resume_from:
+        #     runner.resume(cfg.resume_from)
+        # elif cfg.load_from:
+        #     runner.load_checkpoint(cfg.load_from)
+        runner.run([mix_dataloader], cfg.workflow)
 
 
 if __name__ == '__main__':

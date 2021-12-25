@@ -6,8 +6,8 @@ target_data_root = 'data/dark_zurich/'
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53],
                     std=[58.395, 57.12, 57.375],
                     to_rgb=True)
-# crop_size = (512, 1024)
-crop_size = (32, 32)
+crop_size = (512, 1024)
+# crop_size = (32, 32)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
@@ -97,14 +97,20 @@ data = dict(samples_per_gpu=2,
                                            data_root=source_data_root,
                                            img_dir='leftImg8bit/train',
                                            ann_dir='gtFine/train',
-                                           pipeline=train_pipeline),
+                                           pipeline=train_pipeline,
+                                           ratio=0.001),
                                 test=dict(type=source_dataset_type,
                                           data_root=source_data_root,
                                           img_dir='leftImg8bit/val',
                                           ann_dir='gtFine/val',
-                                          pipeline=source_test_pipeline,
-                                          ratio=0.002)),
-            target_dataset=dict(train=dict(type=target_dataset_type,
+                                          pipeline=source_test_pipeline)),
+            target_dataset=dict(pretrain=dict(type=target_dataset_type,
+                                              data_root=target_data_root,
+                                              img_dir='train/rgb_anon/train',
+                                              ann_dir=None,
+                                              pipeline=test_pipeline,
+                                              ratio=0.001),
+                                train=dict(type=target_dataset_type,
                                            data_root=target_data_root,
                                            img_dir='train/rgb_anon/train',
                                            ann_dir=None,

@@ -1,4 +1,6 @@
-_base_ = ['../datasets/city2dark_v2.py']
+_base_ = [
+    '../datasets/city2dark_v2.py',
+]
 
 # norm_cfg = dict(type='SyncBN', requires_grad=True)
 norm_cfg = dict(type='BN', requires_grad=True)
@@ -49,7 +51,26 @@ model = dict(
 train_cfg = None
 test_cfg = dict(mode='whole')
 
+runner = dict(type='EpochBasedRunner', max_epochs=4)
+
+# schedules configs
+# optimizer
+optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0005)
+optimizer_config = dict()
+# learning policy
+lr_config = dict(policy='poly', power=0.9, min_lr=1e-4, by_epoch=False)
+# runtime settings
+# runner = dict(type='IterBasedRunner', max_iters=20000)
+checkpoint_config = dict(by_epoch=False, interval=2000)
+evaluation = dict(interval=2000, metric='mIoU', pre_eval=True)
+workflow = [('train', 1)]
+
+# pretrain settings
 num_classes = 19
 cudnn_benchmark = False
 num_rounds = 4
 epoch_per_round = 4
+target_portion = 0.2
+target_port_step = 0.05
+max_target_portion = 0.5
+rare_cls_nums = 3

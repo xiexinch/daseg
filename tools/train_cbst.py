@@ -97,7 +97,7 @@ def main():
     # init the logger before other steps
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     log_file = osp.join(cfg.work_dir, f'{timestamp}.log')
-    logger = get_root_logger()
+    logger = get_root_logger(log_file)
 
     meta = {}
     # set random seeds
@@ -149,53 +149,68 @@ def main():
 
         labels, confs = single_gpu_forward(test_model, target_train_dataloader,
                                            cfg.temp_dirs)
-        conf_dict = {k: [] for k in range(num_classes)}
-        pred_cls_num = np.zeros(num_classes)
-        # get confidence vectors
-        print()
-        logger.info('get confidence vectors')
-        prog_bar = mmcv.ProgressBar(len(labels))
-        for i, label_path in enumerate(labels):
-            seg_logits = np.load(label_path)[0]
-            conf = np.load(confs[i])[0]
-            for idx_cls in range(num_classes):
-                cls_hit_map = seg_logits == idx_cls
-                pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + np.sum(
-                    cls_hit_map)
-                if cls_hit_map.any():
-                    conf_cls_temp = conf[idx_cls][cls_hit_map].astype(
-                        np.float32)
-                    len_cls_temp = conf_cls_temp.size
-                    conf_cls = conf_cls_temp[0:len_cls_temp:4]
-                    conf_dict[idx_cls].extend(conf_cls)
-            prog_bar.update()
+
+        if osp.exists(cfg.conf_dict_path) and osp.exists(
+                cfg.pred_cls_num_path):
+            conf_dict = mmcv.load(cfg.conf_dict_path)
+            pred_cls_num = np.load(cfg.pred_cls_num_path)
+        else:
+            conf_dict = {k: [] for k in range(num_classes)}
+            pred_cls_num = np.zeros(num_classes)
+            # get confidence vectors
+            print()
+            logger.info('get confidence vectors')
+            prog_bar = mmcv.ProgressBar(len(labels))
+            for i, label_path in enumerate(labels):
+                seg_logits = np.load(label_path)[0]
+                conf = np.load(confs[i])[0]
+                for idx_cls in range(num_classes):
+                    cls_hit_map = seg_logits == idx_cls
+                    pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + np.sum(
+                        cls_hit_map)
+                    if cls_hit_map.any():
+                        conf_cls_temp = conf[idx_cls][cls_hit_map].astype(
+                            np.float32)
+                        len_cls_temp = conf_cls_temp.size
+                        conf_cls = conf_cls_temp[0:len_cls_temp:4]
+                        conf_dict[idx_cls].extend(conf_cls)
+                prog_bar.update()
+            mmcv.mkdir_or_exist(cfg.temp_root)
+            mmcv.dump(conf_dict, cfg.conf_dict_path)
+            np.save(cfg.pred_cls_num_path, pred_cls_num)
 
         # kc parameters
         print()
         logger.info('kc parameters')
-        cls_thresh = np.ones(num_classes, dtype=np.float32)  # 阈值
-        cls_select_size = np.zeros(num_classes, dtype=np.float32)  # ？这是什么
         cls_size = np.zeros(num_classes, dtype=np.float32)
-        # class-balance
-        for idx_cls in range(num_classes):
-            cls_size[idx_cls] = pred_cls_num[idx_cls]
-            if conf_dict[idx_cls] is not None:
-                conf_dict[idx_cls].sort(reverse=True)
-                len_cls = len(conf_dict[idx_cls])
-                cls_select_size[idx_cls] = int(
-                    math.floor(len_cls * target_portion))
-                len_cls_thresh = int(cls_select_size[idx_cls])  # 取前 q%
-                if len_cls_thresh != 0:
-                    cls_thresh[idx_cls] = conf_dict[idx_cls][len_cls_thresh -
-                                                             1]
-                conf_dict[idx_cls] = None
+        for i in range(num_classes):
+            cls_size[i] = pred_cls_num[idx_cls]
+        if osp.exists(cfg.cls_thresh_path):
+            cls_thresh = np.load(cfg.cls_thresh_path)
+        else:
+            cls_thresh = np.ones(num_classes, dtype=np.float32)  # 阈值
+            cls_select_size = np.zeros(num_classes, dtype=np.float32)  # ？这是什么
+            # class-balance
+            for idx_cls in range(num_classes):
+                if conf_dict[idx_cls] is not None:
+                    conf_dict[idx_cls].sort(reverse=True)
+                    len_cls = len(conf_dict[idx_cls])
+                    cls_select_size[idx_cls] = int(
+                        math.floor(len_cls * target_portion))
+                    len_cls_thresh = int(cls_select_size[idx_cls])  # 取前 q%
+                    if len_cls_thresh != 0:
+                        cls_thresh[idx_cls] = conf_dict[idx_cls][len_cls_thresh
+                                                                 - 1]
+                    conf_dict[idx_cls] = None
+            mmcv.mkdir_or_exist(cfg.temp_root)
+            np.save(cfg.cls_thresh_path, cls_thresh)
 
         # mine_id 是什么意思
-        num_mine_id = len(np.nonzero(cls_size / np.sum(cls_size) < 1e-3)[0])
+        # num_mine_id = len(np.nonzero(cls_size / np.sum(cls_size) < 1e-3)[0])
         # choose the min mine_id
-        id_all = np.argsort(cls_size / np.sum(cls_size))
-        rare_id = id_all[:cfg.rare_cls_nums]
-        mine_id = id_all[:num_mine_id]
+        # id_all = np.argsort(cls_size / np.sum(cls_size))
+        # rare_id = id_all[:cfg.rare_cls_nums]
+        # mine_id = id_all[:num_mine_id]
 
         # 逐步增大 target 阈值
         target_portion = min(target_portion + cfg.target_port_step,
@@ -209,6 +224,7 @@ def main():
         target_dataroot = cfg.data.target_dataset.train['data_root']
         target_img_dir = cfg.data.target_dataset.train['img_dir']
         target_img_prefix = target_dataroot + target_img_dir
+        prog_bar = mmcv.ProgressBar(len(labels))
         for batch_indices, data in zip(loader_indices,
                                        target_train_dataloader):
             for i in batch_indices:
@@ -228,6 +244,8 @@ def main():
                 mmcv.mkdir_or_exist(save_dir)
                 Image.fromarray(weighted_pred_trainIDs.astype(
                     np.uint8)).save(save_path)
+                prog_bar.update()
+
         logger.info('pseudo-label generation finished')
         # 删除临时结果
         shutil.rmtree(cfg.temp_dirs)
@@ -293,8 +311,8 @@ def main():
         # elif cfg.load_from:
         #     runner.load_checkpoint(cfg.load_from)
         runner.run([mix_dataloader], cfg.workflow)
-        train_model = copy.deepcopy(model)
-        test_model = copy.deepcopy(model)
+        train_model = copy.deepcopy(runner.model)
+        test_model = copy.deepcopy(runner.model)
 
 
 if __name__ == '__main__':

@@ -5,6 +5,7 @@ import time
 import math
 import shutil
 from PIL import Image
+import json
 
 import numpy as np
 import mmcv
@@ -264,9 +265,9 @@ def main():
             target_dataset_cfg['data_root'], '')
         target_dataset = build_dataset(target_dataset_cfg)
 
-        # mix_dataset = ConcatDataset(
-        #     [RepeatDataset(source_dataset, 4), target_dataset])
-        mix_dataset = ConcatDataset([source_dataset, target_dataset])
+        mix_dataset = ConcatDataset(
+            [RepeatDataset(source_dataset, 2), target_dataset])
+        # mix_dataset = ConcatDataset([source_dataset, target_dataset])
         mix_dataloader = build_dataloader(mix_dataset,
                                           samples_per_gpu=4,
                                           workers_per_gpu=2,

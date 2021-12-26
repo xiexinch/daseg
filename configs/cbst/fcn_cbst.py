@@ -89,5 +89,5 @@ rare_cls_nums = 3
 temp_root = 'work_dirs/cbst'
 temp_dirs = 'work_dirs/cbst/results'
 conf_dict_path = 'work_dirs/cbst/conf_dict.json'
-pred_cls_num_path = 'work_dirs/cbst/pred_cls_num.npz'
-cls_thresh_path = 'work_dirs/cbst/cls_thresh.npz'
+pred_cls_num_path = 'work_dirs/cbst/pred_cls_num.npy'
+cls_thresh_path = 'work_dirs/cbst/cls_thresh.npy'

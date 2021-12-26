@@ -1,6 +1,5 @@
 import argparse
 import copy
-import os
 import os.path as osp
 import time
 import math
@@ -13,14 +12,14 @@ from mmcv.runner.utils import set_random_seed
 import torch
 from mmcv import Config, DictAction
 from mmcv.runner import (get_dist_info, init_dist, HOOKS, build_optimizer,
-                         build_runner, load_checkpoint, load_state_dict)
+                         build_runner, load_checkpoint)
 from torch.utils.data import ConcatDataset
 
 from daseg.utils import get_root_logger
 from daseg.models import build_train_model
 from mmseg.apis import single_gpu_forward
 from mmseg.core import DistEvalHook, EvalHook
-from mmseg.datasets import build_dataset, build_dataloader, RepeatDataset
+from mmseg.datasets import build_dataset, build_dataloader
 from mmcv.parallel import MMDataParallel
 from mmcv.utils import build_from_cfg
 
@@ -121,7 +120,6 @@ def main():
     mmcv.mkdir_or_exist(target_pseudo_label_path)
 
     num_rounds = cfg.get('num_rounds', 4)
-    epoch_per_round = cfg.get('epoch_per_round', 2)
 
     # source_test_dataset = build_dataset(cfg.data.source_dataset.test)
     target_train_dataloader = build_dataloader(target_dataset,
@@ -152,31 +150,37 @@ def main():
 
         if osp.exists(cfg.conf_dict_path) and osp.exists(
                 cfg.pred_cls_num_path):
+            print()
+            logger.info(f'load conf_dict from {cfg.conf_dict_path}')
+            # conf_dict = np.load(cfg.conf_dict_path, allow_pickle=True)
             conf_dict = mmcv.load(cfg.conf_dict_path)
-            pred_cls_num = np.load(cfg.pred_cls_num_path)
+            pred_cls_num = np.load(cfg.pred_cls_num_path, allow_pickle=True)
         else:
             conf_dict = {k: [] for k in range(num_classes)}
-            pred_cls_num = np.zeros(num_classes)
+            # pred_cls_num = np.zeros(num_classes)
+            pred_cls_num = torch.zeros(num_classes)
             # get confidence vectors
             print()
             logger.info('get confidence vectors')
             prog_bar = mmcv.ProgressBar(len(labels))
             for i, label_path in enumerate(labels):
-                seg_logits = np.load(label_path)[0]
-                conf = np.load(confs[i])[0]
+                seg_logits = torch.from_numpy(np.load(label_path)[0]).cuda()
+                conf = torch.from_numpy(np.load(confs[i])[0]).cuda()
                 for idx_cls in range(num_classes):
                     cls_hit_map = seg_logits == idx_cls
-                    pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + np.sum(
+                    pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + torch.sum(
                         cls_hit_map)
                     if cls_hit_map.any():
-                        conf_cls_temp = conf[idx_cls][cls_hit_map].astype(
-                            np.float32)
-                        len_cls_temp = conf_cls_temp.size
+                        # conf_cls_temp = conf[idx_cls][cls_hit_map].astype(
+                        #     np.float32)
+                        conf_cls_temp = conf[idx_cls][cls_hit_map]
+                        len_cls_temp = conf_cls_temp.size().numel()
                         conf_cls = conf_cls_temp[0:len_cls_temp:4]
-                        conf_dict[idx_cls].extend(conf_cls)
+                        conf_dict[idx_cls].extend(conf_cls.cpu().numpy())
                 prog_bar.update()
             mmcv.mkdir_or_exist(cfg.temp_root)
             mmcv.dump(conf_dict, cfg.conf_dict_path)
+            # np.save(cfg.conf_dict_path, conf_dict)
             np.save(cfg.pred_cls_num_path, pred_cls_num)
 
         # kc parameters
@@ -184,23 +188,28 @@ def main():
         logger.info('kc parameters')
         cls_size = np.zeros(num_classes, dtype=np.float32)
         for i in range(num_classes):
-            cls_size[i] = pred_cls_num[idx_cls]
+            cls_size[i] = pred_cls_num[i]
         if osp.exists(cfg.cls_thresh_path):
-            cls_thresh = np.load(cfg.cls_thresh_path)
+            cls_thresh = np.load(cfg.cls_thresh_path, allow_pickle=True)
         else:
             cls_thresh = np.ones(num_classes, dtype=np.float32)  # 阈值
             cls_select_size = np.zeros(num_classes, dtype=np.float32)  # ？这是什么
             # class-balance
-            for idx_cls in range(num_classes):
+            for idx_cls in conf_dict.keys():
                 if conf_dict[idx_cls] is not None:
-                    conf_dict[idx_cls].sort(reverse=True)
-                    len_cls = len(conf_dict[idx_cls])
-                    cls_select_size[idx_cls] = int(
+                    conf = torch.Tensor(
+                        conf_dict[idx_cls]).cuda().sort(descending=True).values
+                    # conf_dict[idx_cls].sort(reverse=True)
+                    len_cls = len(conf)
+                    cls_select_size[int(idx_cls)] = int(
                         math.floor(len_cls * target_portion))
-                    len_cls_thresh = int(cls_select_size[idx_cls])  # 取前 q%
+                    len_cls_thresh = int(
+                        cls_select_size[int(idx_cls)])  # 取前 q%
                     if len_cls_thresh != 0:
-                        cls_thresh[idx_cls] = conf_dict[idx_cls][len_cls_thresh
-                                                                 - 1]
+                        # cls_thresh[idx_cls] = conf_dict[idx_cls][len_cls_thresh - 1]
+                        cls_thresh[int(idx_cls)] = conf[len_cls_thresh -
+                                                        1].cpu().numpy()
+                        print(cls_thresh[int(idx_cls)])
                     conf_dict[idx_cls] = None
             mmcv.mkdir_or_exist(cfg.temp_root)
             np.save(cfg.cls_thresh_path, cls_thresh)
@@ -273,6 +282,7 @@ def main():
                                   work_dir=f'{cfg.work_dir}/round_{round_idx}',
                                   logger=logger,
                                   meta=meta))
+
         # register hooks
         runner.register_training_hooks(lr_config, optimizer_config,
                                        checkpoint_config, log_config,

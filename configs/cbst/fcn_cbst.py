@@ -51,14 +51,14 @@ model_checkpoint = 'checkpoints/fcn_r50-d8_512x1024_80k_cityscapes_20200606_1130
 train_cfg = None
 test_cfg = dict(mode='whole')
 
-runner = dict(type='EpochBasedRunner', max_epochs=10)
+runner = dict(type='EpochBasedRunner', max_epochs=20)
 
 # schedules configs
 # optimizer
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0005)
 optimizer_config = dict()
 # learning policy
-lr_config = dict(policy='poly', power=0.9, min_lr=1e-4, by_epoch=True)
+lr_config = dict(policy='poly', power=0.9, min_lr=1e-4, by_epoch=False)
 # runtime settings
 # yapf:disable
 log_config = dict(
@@ -80,7 +80,7 @@ evaluation = dict(by_epoch=True, metric='mIoU', pre_eval=True)
 # pretrain settings
 num_classes = 19
 cudnn_benchmark = False
-num_rounds = 4
+num_rounds = 5
 epoch_per_round = 4
 target_portion = 0.2
 target_port_step = 0.05
@@ -88,6 +88,6 @@ max_target_portion = 0.5
 rare_cls_nums = 3
 temp_root = 'work_dirs/cbst'
 temp_dirs = 'work_dirs/cbst/results'
-conf_dict_path = 'work_dirs/cbst/conf_dict.json'
+conf_dict_path = 'work_dirs/cbst/conf_dict.npz'
 pred_cls_num_path = 'work_dirs/cbst/pred_cls_num.npz'
 cls_thresh_path = 'work_dirs/cbst/cls_thresh.npz'

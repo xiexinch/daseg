@@ -6,6 +6,7 @@ import time
 import math
 import shutil
 from PIL import Image
+import json
 
 import numpy as np
 import mmcv
@@ -176,7 +177,13 @@ def main():
                         conf_dict[idx_cls].extend(conf_cls)
                 prog_bar.update()
             mmcv.mkdir_or_exist(cfg.temp_root)
-            mmcv.dump(conf_dict, cfg.conf_dict_path)
+            print()
+            logger.info('get confidence vectors')
+            # with open(cfg.conf_dict_path, 'w') as f:
+            #     logger.info('save conf_dict')
+            # json.dump(conf_dict, f)
+            logger.info('save conf_dict')
+            np.save(cfg.conf_dict_path, conf_dict)
             np.save(cfg.pred_cls_num_path, pred_cls_num)
 
         # kc parameters
@@ -255,9 +262,9 @@ def main():
             target_dataset_cfg['data_root'], '')
         target_dataset = build_dataset(target_dataset_cfg)
 
-        # mix_dataset = ConcatDataset(
-        #     [RepeatDataset(source_dataset, 4), target_dataset])
-        mix_dataset = ConcatDataset([source_dataset, target_dataset])
+        mix_dataset = ConcatDataset(
+            [RepeatDataset(source_dataset, 2), target_dataset])
+        # mix_dataset = ConcatDataset([source_dataset, target_dataset])
         mix_dataloader = build_dataloader(mix_dataset,
                                           samples_per_gpu=4,
                                           workers_per_gpu=2,
